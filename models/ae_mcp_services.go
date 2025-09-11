@@ -1,0 +1,32 @@
+package models
+
+import (
+	"github.com/wcs1010270451/helpers/database"
+	"time"
+)
+
+const TableNameAeMcpServices = "ae_mcp_services"
+
+// 对外服务表
+type AeMcpServices struct {
+	Id              int32     `gorm:"column:id;autoIncrement;not null" json:"id"`
+	ServerId        string    `gorm:"column:server_id;primaryKey" json:"server_id"`                         // 服务id
+	ServerName      string    `gorm:"column:server_name;not null" json:"server_name"`                       // 服务名称
+	Logo            string    `gorm:"column:logo;not null" json:"logo"`                                     // logo
+	ProtocolVersion string    `gorm:"column:protocol_version;default:'2024-11-05'" json:"protocol_version"` // 协议版本号
+	Enabled         bool      `gorm:"column:enabled;default:true" json:"enabled"`                           // 是否开启
+	Tags            string    `gorm:"column:tags;not null" json:"tags"`                                     // 标签名称（多个）
+	Description     string    `gorm:"column:description;not null" json:"description"`                       // 描述
+	TaskChainId     int32     `gorm:"column:task_chain_id;not null" json:"task_chain_id"`                   // 任务链id
+	CreateTime      time.Time `gorm:"column:create_time" json:"create_time"`                                // 创建时间
+	UpdateTime      time.Time `gorm:"column:update_time" json:"update_time"`                                // 更新时间
+	XNetServiceId   string    `gorm:"column:x_net_service_id" json:"x_net_service_id"`                      // xnetserviceid
+}
+
+func (l *AeMcpServices) TableName() string {
+	return TableNameAeMcpServices
+}
+
+func (l *AeMcpServices) GetList(list *[]AeMcpServices) error {
+	return database.DB.Model(AeMcpServices{}).Find(list).Error
+}

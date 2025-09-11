@@ -11,7 +11,7 @@ func init() {
 				// 数据库连接信息
 				"host":     config.Env("DB_HOST", "127.0.0.1"),
 				"port":     config.Env("DB_PORT", "3306"),
-				"database": config.Env("DB_DATABASE", "haitun-server"),
+				"database": config.Env("DB_DATABASE", "mysql"),
 				"username": config.Env("DB_USERNAME", ""),
 				"password": config.Env("DB_PASSWORD", ""),
 				"charset":  "utf8mb4",
@@ -23,6 +23,19 @@ func init() {
 			},
 			"sqlite": map[string]interface{}{
 				"database": config.Env("DB_SQL_FILE", "database/database.db"),
+			},
+			"postgres": map[string]interface{}{
+				"host":     config.Env("DB_HOST", "127.0.0.1"),
+				"port":     config.Env("DB_PORT", "5432"),
+				"database": config.Env("DB_DATABASE", "pgsql"),
+				"username": config.Env("DB_USERNAME", ""),
+				"password": config.Env("DB_PASSWORD", ""),
+				"sslmode":  "disable",
+
+				// 连接池配置
+				"max_idle_connections": config.Env("DB_MAX_IDLE_CONNECTIONS", 100),
+				"max_open_connections": config.Env("DB_MAX_OPEN_CONNECTIONS", 25),
+				"max_life_seconds":     config.Env("DB_MAX_LIFE_SECONDS", 5*60),
 			},
 		}
 	})
