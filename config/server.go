@@ -12,6 +12,7 @@ func init() {
 			// 是否进入调试模式
 			"debug": config.Env("SERVER_DEBUG", false),
 			// 应用服务端口
+			"host": config.Env("SERVER_HOST", "0.0.0.0"),
 			"port": config.Env("SERVER_PORT", "9001"),
 			// 加密会话、JWT 加密
 			"key": config.Env("SERVER_KEY", "33446a9dcf9ea060a0a6532b166da32f304af0de"),

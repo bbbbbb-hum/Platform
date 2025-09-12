@@ -5,11 +5,13 @@ import (
 	"AgentEarth_AgentPlatform/config"
 	"AgentEarth_AgentPlatform/server"
 	"flag"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	helperConfig "github.com/wcs1010270451/helpers/config"
-	"log"
+	"github.com/wcs1010270451/helpers/logger"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	helperConfig "github.com/wcs1010270451/helpers/config"
 )
 
 func init() {
@@ -25,17 +27,20 @@ func main() {
 	flag.Parse()
 	helperConfig.InitConfig(env)
 
+	// 初始化 Logger
+	boot.SetupLogger()
 	// 初始化 DB
 	boot.SetupDB()
 
 	// 初始化 MCP 服务映射表
 	if err := server.InitializeMcpServices(); err != nil {
-		log.Fatalf("初始化MCP服务失败: %v", err)
+		logger.Error("初始化MCP服务失败", zap.Error(err))
+		return
 	}
 
 	// 初始化 mcp 服务
 	//test1Server := server.NewServer()
-	handler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
+	sseHandler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
 		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		var serverID string
 
@@ -50,5 +55,19 @@ func main() {
 		}
 		return mcpServer.GetServer()
 	})
-	log.Fatal(http.ListenAndServe("0.0.0.0:9001", handler))
+	// 设置路由
+	mux := http.NewServeMux()
+	// 修改路由格式：/mcp-server/{server_id}/sse
+	mux.Handle("/mcp-server/", sseHandler)
+
+	// 启动 HTTP 服务
+	host := helperConfig.GetString("server.host")
+	port := helperConfig.GetString("server.port")
+	addr := host + ":" + port
+	logger.Info("MCP服务启动...", zap.String("addr", addr))
+	err := http.ListenAndServe(addr, mux)
+	if err != nil {
+		logger.Error("启动MCP服务失败", zap.Error(err))
+		return
+	}
 }
