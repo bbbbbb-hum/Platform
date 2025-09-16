@@ -1,12 +1,8 @@
 package models
 
 import (
-	"fmt"
 	"github.com/lib/pq"
 	"time"
-
-	"github.com/wcs1010270451/helpers/logger"
-	"go.uber.org/zap"
 )
 
 const TableNameAeMcpServices = "ae_mcp_services"
@@ -32,54 +28,6 @@ func (m *AeMcpServices) TableName() string {
 }
 
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
-	// 获取数据库连接
-	db := getDB()
-
-	// 检查数据库连接是否有效
-	if db == nil {
-		err = fmt.Errorf("数据库连接未初始化")
-		return
-	}
-
-	// 初始化切片，避免nil指针
-	list = make([]*AeMcpServices, 0)
-
-	// PostgreSQL 调试信息
-	logger.Info("mcp_services", zap.String("db_type", fmt.Sprintf("%T", db.Dialector)))
-
-	// 检查表是否存在
-	if !db.Migrator().HasTable("ae_mcp_services") {
-		logger.Warn("mcp_services", zap.String("error", "table ae_mcp_services not exists"))
-		// 尝试检查其他可能的表名
-		tables := []string{"ae_mcp_services", "AeMcpServices", "\"ae_mcp_services\""}
-		for _, tableName := range tables {
-			if db.Migrator().HasTable(tableName) {
-				logger.Info("mcp_services", zap.String("found_table", tableName))
-				break
-			}
-		}
-		return fmt.Errorf("表不存在"), list
-	}
-
-	logger.Info("mcp_services", zap.String("action", "start querying table"))
-
-	// 先尝试简单的原生SQL查询测试连接
-	var count int64
-	err = db.Raw("SELECT COUNT(*) FROM ae_mcp_services").Scan(&count).Error
-	if err != nil {
-		logger.Error("mcp_services", zap.Error(err), zap.String("action", "raw sql count failed"))
-		return
-	}
-	logger.Info("mcp_services", zap.Int64("record_count", count))
-
-	// 执行查询 - 直接指定表名避免模型识别问题
-	err = db.Table("ae_mcp_services").Find(&list).Error
-	if err != nil {
-		// 记录详细的错误信息
-		logger.Error("mcp_services", zap.Error(err), zap.String("action", "query failed"))
-		return
-	}
-
-	logger.Info("mcp_services", zap.Int("found_records", len(list)), zap.String("status", "query success"))
+	err = GetDB().Find(&list).Error
 	return
 }

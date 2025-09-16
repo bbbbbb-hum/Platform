@@ -3,6 +3,7 @@ package main
 import (
 	"AgentEarth_AgentPlatform/boot"
 	"AgentEarth_AgentPlatform/config"
+	"AgentEarth_AgentPlatform/middleware"
 	"AgentEarth_AgentPlatform/server"
 	"flag"
 	"github.com/wcs1010270451/helpers/logger"
@@ -55,10 +56,12 @@ func main() {
 		}
 		return mcpServer.GetServer()
 	})
+	// 增加权限校验
+	authMiddleware := middleware.NewAuth()
 	// 设置路由
 	mux := http.NewServeMux()
 	// 修改路由格式：/mcp-server/{server_id}/sse
-	mux.Handle("/mcp-server/", sseHandler)
+	mux.Handle("/mcp-server/", authMiddleware.Auth(sseHandler.ServeHTTP))
 
 	// 启动 HTTP 服务
 	host := helperConfig.GetString("server.host")

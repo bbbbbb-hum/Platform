@@ -20,6 +20,9 @@ func init() {
 			"url": config.Env("SERVER_URL", "http://0.0.0.0:9001"),
 			// 设置时区，JWT 里会使用，日志记录里也会使用到
 			"timezone": config.Env("TIMEZONE", "Asia/Shanghai"),
+
+			"auth_enable": config.Env("SERVER_AUTH_ENABLE", false),
+			"auth_key":    config.Env("SERVER_AUTH_KEY", ""),
 		}
 	})
 }

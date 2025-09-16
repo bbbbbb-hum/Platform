@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"github.com/lib/pq"
 	"time"
 )
@@ -25,9 +24,5 @@ func (m *AeMcpTaskChain) TableName() string {
 
 // GetOneById 通过id获取一条数据
 func (m *AeMcpTaskChain) GetOneById(id int32) error {
-	db := getDB()
-	if db == nil {
-		return fmt.Errorf("数据库连接未初始化")
-	}
-	return db.Where("id = ?", id).First(m).Error
+	return GetDB().Where("id = ?", id).First(m).Error
 }

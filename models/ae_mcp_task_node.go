@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -24,10 +23,6 @@ func (m *AeMcpTaskNode) TableName() string {
 
 // 获取任务链上所有节点
 func (m *AeMcpTaskNode) GetChianNodes(nodeIds []int32) (err error, list []*AeMcpTaskNode) {
-	db := getDB()
-	if db == nil {
-		return fmt.Errorf("数据库连接未初始化"), nil
-	}
-	err = db.Where("id in ?", nodeIds).Find(&list).Error
+	err = GetDB().Where("id in ?", nodeIds).Find(&list).Error
 	return
 }
