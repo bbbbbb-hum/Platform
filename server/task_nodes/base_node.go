@@ -11,24 +11,23 @@ type NodeProcessor interface {
 	// ProcessNode 处理节点逻辑（可选，用于节点间的数据传递）
 	ProcessNode(nodeCtx *NodeContext) error
 	// RegisterTools 注册节点相关的所有工具到MCP服务器
-	registerTools(mcpServer *mcp.Server) error
+	registerTools(mcpServer *mcp.Server) (error, int)
 }
 
 // GetNodeProcessors 获取所有节点处理器映射
 func GetNodeProcessors() map[string]NodeProcessor {
 	return map[string]NodeProcessor{
-		"empty_processor":      &EmptyNodeProcessor{},
-		"echo_processor":       &EchoNodeProcessor{},
-		"data_processor":       &DataNodeProcessor{},
-		"validation_processor": &ValidationNodeProcessor{},
-		"text_processor":       &TextNodeProcessor{},
-		// 可以继续添加更多节点处理器
+		"a_processor": &ANodeProcessor{},
+		"b_processor": &BNodeProcessor{},
+		"c_processor": &CNodeProcessor{},
 	}
 }
 
 type NodeContext struct {
 	ChainID   int32
-	Data      map[string]interface{}
+	Data      D
 	McpServer *mcp.Server
 	// 可以添加其他链级别的信息
 }
+
+type D map[string]interface{}

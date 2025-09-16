@@ -73,9 +73,13 @@ func (p *TaskChainProcessor) RegisterNodesToMcpServer(mcpServer *mcp.Server) err
 		if err != nil {
 			logger.Error("处理节点失败", zap.String("nodeName", node.NodeName), zap.Error(err))
 		}
-		logger.Info("成功注册节点处理器", zap.String("nodeName", node.NodeName), zap.String("nodeHandle", node.NodeHandle))
+		logger.Debug("成功注册节点处理器", zap.String("nodeName", node.NodeName))
 	}
-
+	toolsNum := 0
+	if allToolsNum, ok := nodeCtx.Data["tools_num"]; ok {
+		toolsNum = allToolsNum.(int)
+	}
+	logger.Debug("成功完成所有节点处理", zap.Int("toolsNum", toolsNum))
 	return nil
 }
 
