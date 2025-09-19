@@ -129,13 +129,17 @@ server.Init()
 	for node in chanin.nodes:{
 		tools.append(node.getTools())
 	}
-	server.AddTools(tools)
-
+	server.AddTools(tool1,server.OnCallTool)
+	server.AddTools(tool2,server.OnCallTool)
+	server.AddTools(tool3,server.OnCallTool)
+	server.AddTools(tool4,server.OnCallTool)
+	server.AddTools(tool5,server.OnCallTool)
+	server.AddTools(tool6,server.OnCallTool)
 }
 
 server.OnCallTool(toolName ="tool_1",toolParams)
 {
-	//获取工具列表并注册
+
 	for node in chanin.nodes:{
 		node.Process(ctx,toolName="tool_1",toolParams)
 	}
@@ -149,14 +153,12 @@ gaodeNode.Init(){
 	for tool in tools:{
 		mapToolNameToMcp[tool.name] = tool
 	}
-
 }
 gaodeNode.GetTools(){
 	return tools
 }
 gaodeNode.Process(ctx,toolName="tool_1",toolParams)
-{
-	
+{	
 	mapToolNameToMcp[toolName].callTool(ctx,toolName="tool_1",toolParams)
 }
 
