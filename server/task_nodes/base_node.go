@@ -17,9 +17,10 @@ type NodeProcessor interface {
 // GetNodeProcessors 获取所有节点处理器映射
 func GetNodeProcessors() map[string]NodeProcessor {
 	return map[string]NodeProcessor{
-		"a_processor": &ANodeProcessor{},
-		"b_processor": &BNodeProcessor{},
-		"c_processor": &CNodeProcessor{},
+		"a_processor":     &ANodeProcessor{},
+		"b_processor":     &BNodeProcessor{},
+		"c_processor":     &CNodeProcessor{},
+		"gaode_processor": &GaoDeNodeProcessor{}, // 远程工具代理处理器
 	}
 }
 

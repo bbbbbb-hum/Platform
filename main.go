@@ -6,10 +6,11 @@ import (
 	"AgentEarth_AgentPlatform/middleware"
 	"AgentEarth_AgentPlatform/server"
 	"flag"
-	"github.com/wcs1010270451/helpers/logger"
-	"go.uber.org/zap"
 	"net/http"
 	"strings"
+
+	"github.com/wcs1010270451/helpers/logger"
+	"go.uber.org/zap"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	helperConfig "github.com/wcs1010270451/helpers/config"

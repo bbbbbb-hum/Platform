@@ -89,7 +89,7 @@ func SetupDB() {
 	// 设置每个链接的过期时间
 	database.SQLDB.SetConnMaxLifetime(time.Duration(config.GetInt("database.max_life_seconds")) * time.Second)
 
-	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pool configured"))
+	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pools configured"))
 
 	// database.DB.AutoMigrate(&user.User{})
 }

@@ -22,7 +22,7 @@ func (m *AeMcpTaskChain) TableName() string {
 	return TableNameAeMcpTaskChain
 }
 
-// GetOneById 通过id获取一条数据
-func (m *AeMcpTaskChain) GetOneById(id int32) error {
-	return GetDB().Where("id = ?", id).First(m).Error
+// GetOne 通过id获取一条数据
+func (m *AeMcpTaskChain) GetOne(id int32) error {
+	return GetDB().First(m, id).Error
 }

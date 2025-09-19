@@ -21,7 +21,7 @@ func ProcessTaskChain(chainId int32, mcpServer *mcp.Server) error {
 
 	// 获取任务链和节点信息
 	chainModel := &models.AeMcpTaskChain{}
-	err := chainModel.GetOneById(chainId)
+	err := chainModel.GetOne(chainId)
 	if err != nil {
 		return fmt.Errorf("获取任务链失败: %w", err)
 	}
