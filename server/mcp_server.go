@@ -4,6 +4,7 @@ import (
 	"AgentEarth_AgentPlatform/models"
 	"context"
 	"fmt"
+
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 
@@ -106,3 +107,57 @@ func createMcpServerFromConfig(config *models.AeMcpServices) *Server {
 
 	return server
 }
+func createMcpServerFromConfig(config *models.AeMcpExternalServicesConfig) *Server {
+	server := &Server{}
+	server.Init()
+	server.mcpServer = mcp.NewServer(config.Name, nil)
+
+	return server
+}
+
+
+
+server.Init()
+{
+	//初始化节点
+	for node in chain.nodes:{
+		node.init()
+
+	}
+	//获取工具列表并注册
+	tools = tools{}
+	for node in chanin.nodes:{
+		tools.append(node.getTools())
+	}
+	server.AddTools(tools)
+
+}
+
+server.OnCallTool(toolName ="tool_1",toolParams)
+{
+	//获取工具列表并注册
+	for node in chanin.nodes:{
+		node.Process(ctx,toolName="tool_1",toolParams)
+	}
+
+}
+
+gaodeNode.Init(){
+	gaodeMcp = initMCP(gaodeConnectionInfo,gaodeConnectionType)
+	
+	tools = gaodeMcp.getTools()
+	for tool in tools:{
+		mapToolNameToMcp[tool.name] = tool
+	}
+
+}
+gaodeNode.GetTools(){
+	return tools
+}
+gaodeNode.Process(ctx,toolName="tool_1",toolParams)
+{
+	
+	mapToolNameToMcp[toolName].callTool(ctx,toolName="tool_1",toolParams)
+}
+
+
