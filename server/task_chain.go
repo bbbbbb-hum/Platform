@@ -9,6 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type TaskChain struct {
+	ChianId int32
+	Nodes   []*task_nodes.Node
+	Tools   []*mcp.Tool
+}
+
 // TaskChainProcessor 任务链处理器
 type TaskChainProcessor struct {
 	Chain *models.AeMcpTaskChain

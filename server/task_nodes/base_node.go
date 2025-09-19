@@ -4,6 +4,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type Node interface {
+	Init() error
+	Process(ctx *NodeContext) error
+	GetTools() []*mcp.Tool
+}
+
 // NodeProcessor 节点处理器接口
 type NodeProcessor interface {
 	// GetNodeName 获取节点名称
