@@ -2,8 +2,12 @@ package server
 
 import (
 	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/servers"
 	"context"
 	"fmt"
+	"reflect"
+
+	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
@@ -11,18 +15,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var McpServicesMap = map[string]*Server{}
-
-type Server struct {
-	mcpServer *mcp.Server
-}
-
-func (s *Server) GetServer() *mcp.Server {
-	return s.mcpServer
-}
-
 type EchoParams struct {
-	Text string `json:"text"`
+	Text string `json:"text" `
+	//Text string `json:"text"`
 }
 
 func Echo(ctx context.Context, req *mcp.CallToolRequest, args EchoParams) (*mcp.CallToolResult, any, error) {
@@ -47,7 +42,7 @@ func InitializeMcpServices() error {
 	logger.Info("从数据库获取到MCP服务记录", zap.Int("count", len(serviceList)))
 
 	// 清空现有的服务映射表
-	McpServicesMap = make(map[string]*Server)
+	servers.McpServicesMap = make(map[string]*servers.Server)
 
 	// 遍历服务列表，为每个启用的服务创建实例
 	enabledCount := 0
@@ -60,7 +55,7 @@ func InitializeMcpServices() error {
 		// 创建MCP服务实例
 		server := createMcpServerFromConfig(service)
 		if server != nil {
-			McpServicesMap[service.ServerId] = server
+			servers.McpServicesMap[service.ServerId] = server
 			enabledCount++
 			logger.Info("成功加载MCP服务", zap.String("server_name", service.ServerName), zap.String("server_id", service.ServerId))
 		} else {
@@ -72,8 +67,8 @@ func InitializeMcpServices() error {
 }
 
 // createMcpServerFromConfig 根据配置创建MCP服务实例
-func createMcpServerFromConfig(config *models.AeMcpServices) *Server {
-	server := &Server{}
+func createMcpServerFromConfig(config *models.AeMcpServices) *servers.Server {
+	server := &servers.Server{}
 
 	// 根据配置创建MCP服务器实例
 	implementation := &mcp.Implementation{
@@ -107,59 +102,126 @@ func createMcpServerFromConfig(config *models.AeMcpServices) *Server {
 
 	return server
 }
-func createMcpServerFromConfig(config *models.AeMcpExternalServicesConfig) *Server {
-	server := &Server{}
-	server.Init()
-	server.mcpServer = mcp.NewServer(config.Name, nil)
 
-	return server
-}
+func InitializeMcpServicesV2() error {
+	server := &servers.Server{}
 
-
-
-server.Init()
-{
-	//初始化节点
-	for node in chain.nodes:{
-		node.init()
-
-	}
-	//获取工具列表并注册
-	tools = tools{}
-	for node in chanin.nodes:{
-		tools.append(node.getTools())
-	}
-	server.AddTools(tool1,server.OnCallTool)
-	server.AddTools(tool2,server.OnCallTool)
-	server.AddTools(tool3,server.OnCallTool)
-	server.AddTools(tool4,server.OnCallTool)
-	server.AddTools(tool5,server.OnCallTool)
-	server.AddTools(tool6,server.OnCallTool)
-}
-
-server.OnCallTool(toolName ="tool_1",toolParams)
-{
-
-	for node in chanin.nodes:{
-		node.Process(ctx,toolName="tool_1",toolParams)
+	// 根据配置创建MCP服务器实例
+	implementation := &mcp.Implementation{
+		Name:    "echo",
+		Title:   "回声输出",
+		Version: "2024-11-05",
 	}
 
-}
-
-gaodeNode.Init(){
-	gaodeMcp = initMCP(gaodeConnectionInfo,gaodeConnectionType)
-	
-	tools = gaodeMcp.getTools()
-	for tool in tools:{
-		mapToolNameToMcp[tool.name] = tool
+	server.mcpServer = mcp.NewServer(implementation, nil)
+	// 生成 schema
+	//reflector := jsonschema.Reflector{
+	//	AllowAdditionalProperties:  false,
+	//	RequiredFromJSONSchemaTags: true,
+	//}
+	//echoInput := createEchoSchema()
+	echoInput, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{})
+	mcp.AddTool(server.mcpServer, &mcp.Tool{
+		Meta: mcp.Meta{
+			"id": "1",
+		},
+		Annotations:  nil,
+		Description:  "输出输入参数",
+		InputSchema:  echoInput,
+		Name:         "echo",
+		OutputSchema: nil,
+		Title:        "Echo",
+	}, OnCallTool)
+	//logsInput := createLogsSchema()
+	logsInput, err := jsonschema.ForType(reflect.TypeOf(LogsParam{}), &jsonschema.ForOptions{})
+	if err != nil {
+		return err
 	}
-}
-gaodeNode.GetTools(){
-	return tools
-}
-gaodeNode.Process(ctx,toolName="tool_1",toolParams)
-{	
-	mapToolNameToMcp[toolName].callTool(ctx,toolName="tool_1",toolParams)
+	mcp.AddTool(server.mcpServer, &mcp.Tool{
+		Meta: mcp.Meta{
+			"id": "2",
+		},
+		Annotations:  nil,
+		Description:  "日志",
+		InputSchema:  logsInput,
+		Name:         "logs",
+		OutputSchema: nil,
+		Title:        "Logs",
+	}, OnCallTool)
+	servers.McpServicesMap["echo"] = server
+	return nil
 }
 
+type LogsParam struct {
+	Log string `json:"log"`
+}
 
+func OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.CallToolResult, any, error) {
+	logger.Info(fmt.Sprintf("工具名称: %s", req.Params.Name))
+	logger.Info(fmt.Sprintf("工具参数: %s", req.Params.Arguments))
+	logger.Info(fmt.Sprintf("工具参数类型: %v", req.Params.Meta))
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: fmt.Sprintf("您输入的为 %v", args)},
+		},
+	}, nil, nil
+}
+
+//func createMcpServerFromConfig(config *models.AeMcpExternalServicesConfig) *Server {
+//	server := &Server{}
+//	server.Init()
+//	server.mcpServer = mcp.NewServer(config.Name, nil)
+//
+//	return server
+//}
+
+//server.Init()
+//{
+//	//初始化节点
+//	for node in chain.nodes:{
+//		node.init()
+//
+//	}
+//	//获取工具列表并注册
+//	tools = tools{}
+//	for node in chanin.nodes:{
+//		tools.append(node.getTools())
+//	}
+//	server.AddTools(tool1,server.OnCallTool)
+//	server.AddTools(tool2,server.OnCallTool)
+//	server.AddTools(tool3,server.OnCallTool)
+//	server.AddTools(tool4,server.OnCallTool)
+//	server.AddTools(tool5,server.OnCallTool)
+//	server.AddTools(tool6,server.OnCallTool)
+//}
+//
+//server.OnCallTool(toolName ="tool_1",toolParams)
+//{
+//
+//	for node in chanin.nodes:{
+//		node.Process(ctx,toolName="tool_1",toolParams)
+//	}
+//
+//}
+//
+//gaodeNode.Init(){
+//	gaodeMcp = initMCP(gaodeConnectionInfo,gaodeConnectionType)
+//
+//	tools = gaodeMcp.getTools()
+//	for tool in tools:{
+//		mapToolNameToMcp[tool.name] = tool
+//	}
+//}
+//gaodeNode.GetTools(){
+//	return tools
+//}
+//gaodeNode.Process(ctx,toolName="tool_1",toolParams)
+//{
+//	mapToolNameToMcp[toolName].callTool(ctx,toolName="tool_1",toolParams)
+//}
+
+//mcpServer
+//|--tools:[]*mcp.Tool
+//|  |--name
+//|  |--description
+//|  |--CallTool(ctx,req,args)

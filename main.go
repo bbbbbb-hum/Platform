@@ -5,6 +5,7 @@ import (
 	"AgentEarth_AgentPlatform/config"
 	"AgentEarth_AgentPlatform/middleware"
 	"AgentEarth_AgentPlatform/server"
+	"AgentEarth_AgentPlatform/servers"
 	"flag"
 	"net/http"
 	"strings"
@@ -35,7 +36,8 @@ func main() {
 	boot.SetupDB()
 
 	// 初始化 MCP 服务映射表
-	if err := server.InitializeMcpServices(); err != nil {
+	//if err := server.InitializeMcpServices(); err != nil {
+	if err := server.InitializeMcpServicesV2(); err != nil {
 		logger.Error("初始化MCP服务失败", zap.Error(err))
 		return
 	}
@@ -51,7 +53,7 @@ func main() {
 			serverID = pathParts[1]
 		}
 
-		mcpServer, ok := server.McpServicesMap[serverID]
+		mcpServer, ok := servers.McpServicesMap[serverID]
 		if !ok {
 			return nil
 		}
