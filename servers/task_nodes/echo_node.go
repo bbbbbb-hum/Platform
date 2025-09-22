@@ -39,7 +39,7 @@ func (e *EchoToolNode) Init(ctx *NodeContext) error {
 			InputSchema: echoParamsSchema,
 		}
 
-		if err = ctx.ToolRegistry.RegisterTool(echoTool); err != nil {
+		if err = ctx.ToolRegistry.RegisterTool(echoTool); err != nil { //通过context传递，实现i-b接口
 			logger.Error("注册Echo工具失败", zap.Error(err))
 			return err
 		}
@@ -52,7 +52,7 @@ func (e *EchoToolNode) Init(ctx *NodeContext) error {
 
 func (e *EchoToolNode) Process(ctx *NodeContext) error {
 	// 检查是否为当前节点的 echo 工具调用
-	if e.isMyTool(ctx.ToolName) {
+	if e.isMyTool(ctx.ToolName) { //节点不能对应链上的工具
 		message, ok := ctx.ToolArgs["text"].(string) // 注意：参数名改为 text
 		if !ok {
 			return fmt.Errorf("echo工具缺少text参数")

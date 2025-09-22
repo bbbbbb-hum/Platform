@@ -175,6 +175,7 @@ func (chain *TaskChain) Initialize() error {
 // ProcessToolCall 处理工具调用
 func (chain *TaskChain) ProcessToolCall(toolName string, args map[string]interface{}, meta map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
 	//创建处理节点的上下文
+	//conetxt需要从外面传入
 	ctx := &task_nodes.NodeContext{
 		ChainID:     chain.ChainID,
 		ServiceID:   chain.ServiceID,
@@ -189,6 +190,7 @@ func (chain *TaskChain) ProcessToolCall(toolName string, args map[string]interfa
 	// 执行所有节点
 	for _, node := range chain.Nodes {
 		ctx.CurrentNode = node.GetNodeInfo()
+		//Node和chain需要一样实现i-b接口
 		if err := node.Process(ctx); err != nil {
 			return nil, nil, fmt.Errorf("节点 %d 处理失败: %w", ctx.CurrentNode.NodeID, err)
 		}

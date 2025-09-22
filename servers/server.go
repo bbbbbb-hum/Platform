@@ -98,9 +98,17 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		zap.String("tool_name", toolName),
 		zap.Any("args", args))
 
-	// 获取工具元数据
+	// 获取工具元数据//不需要
 	toolMeta := s.taskChain.GetToolMeta(toolName)
 
 	// 通过任务链处理工具调用
-	return s.taskChain.ProcessToolCall(toolName, args, toolMeta)
+	//定义&实现I-B接口
+	//toolchain的返回值需要处理一下再返回给上层
+	//不需要toolMeta。输入的杂七杂八东西通过context传入；输出的杂七杂八也可以通过context带出来（比如responseMap）。
+	results, structuredResults, err := s.taskChain.ProcessToolCall(toolName, args, toolMeta)
+	if err != nil {
+		return nil, nil, err
+	}
+	//todo:处理一下返回给上层
+	return results, structuredResults, nil
 }
