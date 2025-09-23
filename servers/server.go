@@ -2,6 +2,8 @@ package servers
 
 import (
 	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/servers/task_nodes"
+	"AgentEarth_AgentPlatform/servers/tools"
 	"context"
 	"fmt"
 
@@ -69,46 +71,73 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	server.mcpServer = mcp.NewServer(implementation, nil)
 
 	// 初始化任务链
-	taskChain, err := InitializeTaskChain(service.TaskChainId, service.ServerId)
+	err := InitializeTaskChain(&task_nodes.NodeContext{
+		ChainID:   0,
+		ServiceID: service.ServerId,
+		ResultMap: nil,
+		Stats:     make(map[string]interface{}),
+	})
 	if err != nil {
 		logger.Error("初始化任务链失败", zap.Error(err))
 		return nil
 	}
-	server.taskChain = taskChain
 
 	// 获取工具列表并注册
-	tools := taskChain.GetTools()
-	for _, tool := range tools {
-		// 使用新的工具调用处理器
-		mcp.AddTool[map[string]interface{}](server.mcpServer, tool, server.OnCallTool)
+	toolsMap := tools.GetToolsMap()
+	if toolsList, ok := toolsMap.GetServerTools(service.ServerId); ok {
+		for _, tool := range toolsList {
+			// 使用新的工具调用处理器
+			mcp.AddTool[map[string]interface{}](server.mcpServer, tool, server.OnCallTool)
+		}
+		logger.Info("MCP服务器创建成功",
+			zap.String("service_id", service.ServerId),
+			zap.Int("tools_count", len(toolsList)))
 	}
-
-	logger.Info("MCP服务器创建成功",
-		zap.String("service_id", service.ServerId),
-		zap.Int("tools_count", len(tools)))
-
 	return server
 }
 
 // OnCallTool 新的工具调用处理器
 func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
 	toolName := req.Params.Name
-
-	logger.Info("处理工具调用",
-		zap.String("tool_name", toolName),
-		zap.Any("args", args))
-
-	// 获取工具元数据//不需要
-	toolMeta := s.taskChain.GetToolMeta(toolName)
-
+	logger.Info("处理工具调用", zap.String("tool_name", toolName), zap.Any("args", args))
+	// 获取链ID和服务ID
+	var chainID int32
+	var serviceID string
+	meta := req.Params.GetMeta()
+	if meta != nil {
+		// 获取chain_id
+		if chainIDValue, exists := meta["chain_id"]; exists {
+			if chainIDInt32, ok := chainIDValue.(int32); ok {
+				chainID = chainIDInt32
+			} else if chainIDInt, ok := chainIDValue.(int); ok {
+				chainID = int32(chainIDInt)
+			} else if chainIDFloat, ok := chainIDValue.(float64); ok {
+				chainID = int32(chainIDFloat)
+			}
+		}
+		// 获取server_id
+		if serverIDValue, exists := meta["server_id"]; exists {
+			if serverIDStr, ok := serverIDValue.(string); ok {
+				serviceID = serverIDStr
+			}
+		}
+	}
+	// 创建节点上下文
+	ctxNode := &task_nodes.NodeContext{
+		ChainID:   chainID,
+		ServiceID: serviceID,
+		ResultMap: make(map[int32]map[string]*task_nodes.CallToolResult),
+		Stats:     make(map[string]interface{}),
+	}
 	// 通过任务链处理工具调用
 	//定义&实现I-B接口
 	//toolchain的返回值需要处理一下再返回给上层
 	//不需要toolMeta。输入的杂七杂八东西通过context传入；输出的杂七杂八也可以通过context带出来（比如responseMap）。
-	results, structuredResults, err := s.taskChain.ProcessToolCall(toolName, args, toolMeta)
+	resultMap, err := s.taskChain.ProcessToolCall(ctxNode, toolName, args)
 	if err != nil {
 		return nil, nil, err
 	}
 	//todo:处理一下返回给上层
-	return results, structuredResults, nil
+	// 其他业务逻辑处理
+	return resultMap[toolName].Result, resultMap[toolName].StructuredResult, nil
 }

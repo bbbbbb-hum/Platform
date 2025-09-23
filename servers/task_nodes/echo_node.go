@@ -1,6 +1,8 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/servers/tools"
 	"fmt"
 	"reflect"
 	"time"
@@ -13,71 +15,86 @@ import (
 )
 
 // EchoToolNode 回声工具节点 - 提供工具
-type EchoToolNode struct {
-	BaseNode
+type EchoNode struct {
+	NodeInfo *NodeInfo `json:"node_info"`
 }
 
-func (e *EchoToolNode) Init(ctx *NodeContext) error {
-	logger.Info("初始化回声工具节点", zap.String("node_id", fmt.Sprint(e.Info.NodeID)))
-
+func (e *EchoNode) Init(ctx *NodeContext, node *models.AeMcpTaskNode) error {
+	logger.Info("初始化回声工具节点", zap.String("node_id", string(node.Id)))
+	e.NodeInfo = &NodeInfo{
+		NodeID:      node.Id,
+		NodeType:    node.NodeType,
+		NodeName:    node.NodeName,
+		Description: node.Description,
+	}
+	// 获取节点顺序
+	if nodeStats, ok := ctx.Stats[node.NodeType].(map[string]interface{}); ok {
+		if order := nodeStats["node_order"]; order != nil {
+			e.NodeInfo.Order = order.(int)
+		}
+	}
 	// 在初始化时注册工具到工具注册器
-	if ctx.IsInitPhase && ctx.ToolRegistry != nil {
-		echoParamsSchema, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{
-			IgnoreInvalidTypes: true,
-		})
-		if err != nil {
-			return err
-		}
-		// 将节点ID编码到工具名称中
-		toolName := fmt.Sprintf("echo__%d", e.Info.NodeID) // 使用双下划线分隔
-
-		echoTool := &mcp.Tool{
-			Name:        toolName,
-			Title:       "Echo Tool",
-			Description: "回声工具",
-			// Meta: 暂时不使用，避免类型问题
-			InputSchema: echoParamsSchema,
-		}
-
-		if err = ctx.ToolRegistry.RegisterTool(echoTool); err != nil { //通过context传递，实现i-b接口
-			logger.Error("注册Echo工具失败", zap.Error(err))
-			return err
-		}
-
-		logger.Info("成功注册Echo工具", zap.String("tool_name", echoTool.Name))
+	echoParamsSchema, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{
+		IgnoreInvalidTypes: true,
+	})
+	if err != nil {
+		return err
 	}
+	// 将节点ID编码到工具名称中
+	toolName := fmt.Sprintf("echo__%d", node.Id) // 使用双下划线分隔
 
+	echoTool := &mcp.Tool{
+		Meta: mcp.Meta{
+			"server_id": ctx.ServiceID,
+			"chain_id":  ctx.ChainID,
+			"node_type": node.NodeType,
+			"node_id":   node.Id,
+		},
+		Name:        toolName,
+		Title:       "Echo Tool",
+		Description: "回声工具",
+		InputSchema: echoParamsSchema,
+	}
+	toolsMap := tools.GetToolsMap()
+	toolsMap.AddTool(ctx.ServiceID, toolName, echoTool)
+	logger.Info("成功注册Echo工具", zap.String("tool_name", echoTool.Name))
 	return nil
 }
 
-func (e *EchoToolNode) Process(ctx *NodeContext) error {
-	// 检查是否为当前节点的 echo 工具调用
-	if e.isMyTool(ctx.ToolName) { //节点不能对应链上的工具
-		message, ok := ctx.ToolArgs["text"].(string) // 注意：参数名改为 text
-		if !ok {
-			return fmt.Errorf("echo工具缺少text参数")
-		}
-
-		result := fmt.Sprintf("Echo: %s", message)
-
-		ctx.Result = &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: result},
-			},
-		}
-		ctx.StructuredResult = map[string]interface{}{
-			"echoed_text": result,
-			"timestamp":   time.Now().Unix(),
-			"node_id":     e.Info.NodeID,
+func (e *EchoNode) GetTools(ctx *NodeContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error) {
+	// 获取工具列表
+	toolsMap := tools.GetToolsMap()
+	currentToolList = lastStepToolList
+	if toolsList, ok := toolsMap.GetServerTools(ctx.ServiceID); ok {
+		for _, tool := range toolsList {
+			currentToolList = append(currentToolList, tool)
 		}
 	}
-	return nil
+	return
 }
+func (e *EchoNode) Process(ctx *NodeContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error) {
+	currentResp = lastStepResp
+	// 检查是否为当前节点的 echo 工具调用参数
+	params, ok := userParamMap.(EchoParams)
+	if !ok || params.Text == "" {
+		err = fmt.Errorf("echo工具缺少参数")
+		return
+	}
+	result := fmt.Sprintf("Echo: %s", params.Text)
 
-// isMyTool 检查工具是否属于当前节点
-func (e *EchoToolNode) isMyTool(toolName string) bool {
-	expectedToolName := fmt.Sprintf("echo__%d", e.Info.NodeID)
-	return toolName == expectedToolName
+	currentResp[userCmd].Result = &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: result},
+		},
+	}
+	currentResp[userCmd].StructuredResult = map[string]interface{}{
+		"echoed_text": result,
+		"timestamp":   time.Now().Unix(),
+		"node_id":     e.NodeInfo.NodeID,
+	}
+	// 将结果保存到节点上下文
+	ctx.ResultMap[e.NodeInfo.NodeID] = currentResp
+	return
 }
 
 type EchoParams struct {
