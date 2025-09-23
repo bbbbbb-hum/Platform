@@ -19,7 +19,7 @@ type EchoNode struct {
 	NodeInfo *NodeInfo `json:"node_info"`
 }
 
-func (e *EchoNode) Init(ctx *NodeContext, node *models.AeMcpTaskNode) error {
+func (e *EchoNode) Init(ctx *RunningContext, node *models.AeMcpTaskNode) error {
 	logger.Info("初始化回声工具节点", zap.String("node_id", string(node.Id)))
 	e.NodeInfo = &NodeInfo{
 		NodeID:      node.Id,
@@ -63,7 +63,7 @@ func (e *EchoNode) Init(ctx *NodeContext, node *models.AeMcpTaskNode) error {
 	return nil
 }
 
-func (e *EchoNode) GetTools(ctx *NodeContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error) {
+func (e *EchoNode) GetTools(ctx *RunningContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error) {
 	// 获取工具列表
 	toolsMap := tools.GetToolsMap()
 	currentToolList = lastStepToolList
@@ -74,7 +74,7 @@ func (e *EchoNode) GetTools(ctx *NodeContext, lastStepToolList []*mcp.Tool) (cur
 	}
 	return
 }
-func (e *EchoNode) Process(ctx *NodeContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error) {
+func (e *EchoNode) Process(ctx *RunningContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error) {
 	currentResp = lastStepResp
 	// 检查是否为当前节点的 echo 工具调用参数
 	params, ok := userParamMap.(EchoParams)

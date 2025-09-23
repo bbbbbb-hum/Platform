@@ -20,7 +20,7 @@ type TaskChain struct {
 }
 
 // InitializeTaskChain 初始化任务链
-func InitializeTaskChain(ctx *task_nodes.NodeContext) error {
+func InitializeTaskChain(ctx *task_nodes.RunningContext) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(ctx.ChainID)))
 
 	// 获取任务链和节点信息
@@ -40,6 +40,7 @@ func InitializeTaskChain(ctx *task_nodes.NodeContext) error {
 		if ctx.Stats[nodeModel.NodeType] == nil {
 			ctx.Stats[nodeModel.NodeType] = make(map[string]interface{})
 		}
+		//toolNode怎么存储的？和handler，id等的关系是什么？高德和百度两个tool,配置不一样，但我们不希望写两遍代码，怎么处理？
 		// 类型断言并添加node_order字段
 		if nodeStats, ok := ctx.Stats[nodeModel.NodeType].(map[string]interface{}); ok {
 			nodeStats["node_order"] = i
@@ -57,7 +58,7 @@ func InitializeTaskChain(ctx *task_nodes.NodeContext) error {
 }
 
 // ProcessToolCall 处理链上工具调用
-func (chain *TaskChain) ProcessToolCall(ctx *task_nodes.NodeContext, toolName string, args map[string]interface{}) (map[string]*task_nodes.CallToolResult, error) {
+func (chain *TaskChain) ProcessToolCall(ctx *task_nodes.RunningContext, toolName string, args map[string]interface{}) (map[string]*task_nodes.CallToolResult, error) {
 	//conetxt需要从外面传入
 	// 获取任务链和节点信息
 	chainModel := &models.AeMcpTaskChain{}
@@ -67,7 +68,7 @@ func (chain *TaskChain) ProcessToolCall(ctx *task_nodes.NodeContext, toolName st
 	}
 	// 链上所有节点信息
 	nodesModel := &models.AeMcpTaskNode{}
-	err, nodeModels := nodesModel.GetChianNodes(chainModel.NodeIds)
+	err, nodeModels := nodesModel.GetChianNodes(chainModel.NodeIds) //每次请求读数据库？
 	if err != nil {
 		return nil, fmt.Errorf("获取节点失败: %w", err)
 	}

@@ -71,7 +71,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	server.mcpServer = mcp.NewServer(implementation, nil)
 
 	// 初始化任务链
-	err := InitializeTaskChain(&task_nodes.NodeContext{
+	err := InitializeTaskChain(&task_nodes.RunningContext{
 		ChainID:   0,
 		ServiceID: service.ServerId,
 		ResultMap: nil,
@@ -123,7 +123,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		}
 	}
 	// 创建节点上下文
-	ctxNode := &task_nodes.NodeContext{
+	ctxNode := &task_nodes.RunningContext{
 		ChainID:   chainID,
 		ServiceID: serviceID,
 		ResultMap: make(map[int32]map[string]*task_nodes.CallToolResult),

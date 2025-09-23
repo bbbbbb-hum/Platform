@@ -2,14 +2,15 @@ package task_nodes
 
 import (
 	"AgentEarth_AgentPlatform/models"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Node 节点接口 - 定义节点的基本行为
 type Node interface {
-	Init(ctx *NodeContext, node *models.AeMcpTaskNode) error
-	GetTools(ctx *NodeContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error)
-	Process(ctx *NodeContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error)
+	Init(node *models.AeMcpTaskNode) error
+	GetTools(ctx *RunningContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error)
+	Process(ctx *RunningContext, userCmd string, userParamMap JsonMap, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error)
 	GetNodeInfo() *NodeInfo
 }
 
@@ -33,8 +34,8 @@ type ToolRegistry interface {
 	GetAllTools() []*mcp.Tool
 }
 
-// NodeContext 节点上下文 - 在节点间传递数据
-type NodeContext struct {
+// RunningContext 节点上下文 - 在节点间传递数据
+type RunningContext struct {
 	// 链级别信息
 	ChainID   int32                                `json:"chain_id"`
 	ServiceID string                               `json:"service_id"`
