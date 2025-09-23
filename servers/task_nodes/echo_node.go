@@ -1,7 +1,7 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/servers/ctx"
 	"AgentEarth_AgentPlatform/servers/tools"
 	"fmt"
 	"reflect"
@@ -16,22 +16,16 @@ import (
 
 // EchoToolNode 回声工具节点 - 提供工具
 type EchoNode struct {
-	NodeInfo *NodeInfo `json:"node_info"`
+	NodeInfo *NodeInfo
 }
 
-func (e *EchoNode) Init(ctx *RunningContext, node *models.AeMcpTaskNode) error {
-	logger.Info("初始化回声工具节点", zap.String("node_id", string(node.Id)))
+func (e *EchoNode) Init(config InitConfig) error {
+	logger.Info("初始化回声工具节点", zap.String("node_id", string(config.NodeModel.Id)))
 	e.NodeInfo = &NodeInfo{
-		NodeID:      node.Id,
-		NodeType:    node.NodeType,
-		NodeName:    node.NodeName,
-		Description: node.Description,
-	}
-	// 获取节点顺序
-	if nodeStats, ok := ctx.Stats[node.NodeType].(map[string]interface{}); ok {
-		if order := nodeStats["node_order"]; order != nil {
-			e.NodeInfo.Order = order.(int)
-		}
+		NodeID:      config.NodeModel.Id,
+		NodeType:    config.NodeModel.NodeType,
+		NodeName:    config.NodeModel.NodeName,
+		Description: config.NodeModel.Description,
 	}
 	// 在初始化时注册工具到工具注册器
 	echoParamsSchema, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{
@@ -41,14 +35,14 @@ func (e *EchoNode) Init(ctx *RunningContext, node *models.AeMcpTaskNode) error {
 		return err
 	}
 	// 将节点ID编码到工具名称中
-	toolName := fmt.Sprintf("echo__%d", node.Id) // 使用双下划线分隔
+	toolName := fmt.Sprintf("echo__%d", config.NodeModel.Id) // 使用双下划线分隔
 
 	echoTool := &mcp.Tool{
 		Meta: mcp.Meta{
-			"server_id": ctx.ServiceID,
-			"chain_id":  ctx.ChainID,
-			"node_type": node.NodeType,
-			"node_id":   node.Id,
+			"server_id": config.ServerID,
+			"chain_id":  config.ChianID,
+			"node_type": config.NodeModel.NodeType,
+			"node_id":   config.NodeModel.Id,
 		},
 		Name:        toolName,
 		Title:       "Echo Tool",
@@ -56,17 +50,16 @@ func (e *EchoNode) Init(ctx *RunningContext, node *models.AeMcpTaskNode) error {
 		InputSchema: echoParamsSchema,
 	}
 	toolsMap := tools.GetToolsMap()
-	//可以添加，修改或者删除当然链上的所有工具
-	//这里只做添加
-	toolsMap.AddTool(ctx.ServiceID, toolName, echoTool)
-	logger.Info("将Echo工具放入工具Map中", zap.String("tool_name", echoTool.Name))
+	toolsMap.AddTool(config.ServerID, toolName, echoTool)
+
+	logger.Info("成功注册Echo工具", zap.String("tool_name", echoTool.Name))
 	return nil
 }
 
-func (e *EchoNode) GetTools(ctx *RunningContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error) {
+func (e *EchoNode) GetTools(ctx *ctx.RunningContext) (currentToolList []*mcp.Tool) {
 	// 获取工具列表
 	toolsMap := tools.GetToolsMap()
-	currentToolList = lastStepToolList
+	currentToolList = []*mcp.Tool{}
 	if toolsList, ok := toolsMap.GetServerTools(ctx.ServiceID); ok {
 		for _, tool := range toolsList {
 			currentToolList = append(currentToolList, tool)
@@ -74,15 +67,20 @@ func (e *EchoNode) GetTools(ctx *RunningContext, lastStepToolList []*mcp.Tool) (
 	}
 	return
 }
-func (e *EchoNode) Process(ctx *RunningContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error) {
+func (e *EchoNode) Process(ctx *ctx.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*ctx.CallToolResult) (currentResp map[string]*ctx.CallToolResult, err error) {
 	currentResp = lastStepResp
 	// 检查是否为当前节点的 echo 工具调用参数
-	params, ok := userParamMap.(EchoParams)
-	if !ok || params.Text == "" {
+	var text string
+	if v, ok := userParamMap["text"]; ok {
+		if s, ok := v.(string); ok {
+			text = s
+		}
+	}
+	if text == "" {
 		err = fmt.Errorf("echo工具缺少参数")
 		return
 	}
-	result := fmt.Sprintf("Echo: %s", params.Text)
+	result := fmt.Sprintf("Echo: %s", text)
 
 	currentResp[userCmd].Result = &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -99,6 +97,7 @@ func (e *EchoNode) Process(ctx *RunningContext, userCmd string, userParamMap any
 	return
 }
 
+// GetNodeInfo 获取节点信息
 func (e *EchoNode) GetNodeInfo() *NodeInfo {
 	return e.NodeInfo
 }

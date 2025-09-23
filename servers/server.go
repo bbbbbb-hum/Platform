@@ -2,7 +2,8 @@ package servers
 
 import (
 	"AgentEarth_AgentPlatform/models"
-	"AgentEarth_AgentPlatform/servers/task_nodes"
+	ctx2 "AgentEarth_AgentPlatform/servers/ctx"
+	"AgentEarth_AgentPlatform/servers/task_chain"
 	"AgentEarth_AgentPlatform/servers/tools"
 	"context"
 	"fmt"
@@ -16,7 +17,6 @@ var McpServicesMap = map[string]*Server{}
 
 type Server struct {
 	mcpServer *mcp.Server
-	taskChain *TaskChain
 }
 
 func (s *Server) GetServer() *mcp.Server {
@@ -71,16 +71,26 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	server.mcpServer = mcp.NewServer(implementation, nil)
 
 	// 初始化任务链
-	err := InitializeTaskChain(&task_nodes.RunningContext{
-		ChainID:   0,
-		ServiceID: service.ServerId,
-		ResultMap: nil,
-		Stats:     make(map[string]interface{}),
+	chainModel := &models.AeMcpTaskChain{}
+	err := chainModel.GetOne(service.TaskChainId)
+	if err != nil {
+		logger.Error("获取任务链失败", zap.Error(err))
+		return nil
+	}
+	chainMap := task_chain.GetChainMap()
+	// 创建ChainInstance
+	chainInstance := &task_chain.ChainInstance{}
+	// 初始化链（这里会初始化所有节点实例）
+	err = chainInstance.Init(task_chain.InitConfig{
+		ServiceId:  service.ServerId,
+		ChainModel: chainModel,
 	})
 	if err != nil {
 		logger.Error("初始化任务链失败", zap.Error(err))
 		return nil
 	}
+	// 将链添加到ChainMap中
+	chainMap.AddChain(service.ServerId, chainInstance.Chain)
 
 	// 获取工具列表并注册
 	toolsMap := tools.GetToolsMap()
@@ -123,17 +133,19 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		}
 	}
 	// 创建节点上下文
-	ctxNode := &task_nodes.RunningContext{
+	ctxNode := &ctx2.RunningContext{
 		ChainID:   chainID,
 		ServiceID: serviceID,
-		ResultMap: make(map[int32]map[string]*task_nodes.CallToolResult),
+		ResultMap: make(map[int32]map[string]*ctx2.CallToolResult),
 		Stats:     make(map[string]interface{}),
 	}
 	// 通过任务链处理工具调用
 	//定义&实现I-B接口
 	//toolchain的返回值需要处理一下再返回给上层
 	//不需要toolMeta。输入的杂七杂八东西通过context传入；输出的杂七杂八也可以通过context带出来（比如responseMap）。
-	resultMap, err := s.taskChain.ProcessToolCall(ctxNode, toolName, args)
+	chainMap := task_chain.GetChainMap()
+	chainInstance := chainMap.GetChainByServiceId(serviceID)
+	resultMap, err := chainInstance.TaskChain.Process(ctxNode, toolName, args)
 	if err != nil {
 		return nil, nil, err
 	}
