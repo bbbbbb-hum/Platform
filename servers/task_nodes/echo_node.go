@@ -56,8 +56,10 @@ func (e *EchoNode) Init(ctx *NodeContext, node *models.AeMcpTaskNode) error {
 		InputSchema: echoParamsSchema,
 	}
 	toolsMap := tools.GetToolsMap()
+	//可以添加，修改或者删除当然链上的所有工具
+	//这里只做添加
 	toolsMap.AddTool(ctx.ServiceID, toolName, echoTool)
-	logger.Info("成功注册Echo工具", zap.String("tool_name", echoTool.Name))
+	logger.Info("将Echo工具放入工具Map中", zap.String("tool_name", echoTool.Name))
 	return nil
 }
 
@@ -95,6 +97,10 @@ func (e *EchoNode) Process(ctx *NodeContext, userCmd string, userParamMap any, l
 	// 将结果保存到节点上下文
 	ctx.ResultMap[e.NodeInfo.NodeID] = currentResp
 	return
+}
+
+func (e *EchoNode) GetNodeInfo() *NodeInfo {
+	return e.NodeInfo
 }
 
 type EchoParams struct {

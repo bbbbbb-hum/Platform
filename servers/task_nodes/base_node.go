@@ -10,6 +10,7 @@ type Node interface {
 	Init(ctx *NodeContext, node *models.AeMcpTaskNode) error
 	GetTools(ctx *NodeContext, lastStepToolList []*mcp.Tool) (currentToolList []*mcp.Tool, err error)
 	Process(ctx *NodeContext, userCmd string, userParamMap any, lastStepResp map[string]*CallToolResult) (currentResp map[string]*CallToolResult, err error)
+	GetNodeInfo() *NodeInfo
 }
 
 var NodeMap = map[string]Node{

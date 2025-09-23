@@ -50,3 +50,7 @@ func (l *LoggerNode) Process(ctx *NodeContext, userCmd string, userParamMap any,
 	logger.Info("当前节点数据", zap.String("node_id", fmt.Sprint(ctx.ChainID)), zap.String("user_cmd", userCmd), zap.Any("user_param_map", userParamMap), zap.Any("last_step_resp", currentResp))
 	return
 }
+
+func (l *LoggerNode) GetNodeInfo() *NodeInfo {
+	return l.NodeInfo
+}
