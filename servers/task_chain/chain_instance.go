@@ -82,10 +82,16 @@ func (i *ChainInstance) Init(config InitConfig) error {
 func (i *ChainInstance) Process(ctx *ctx.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*ctx.CallToolResult, err error) {
 	// TODO: 节点处理逻辑
 	var lastResp map[string]*ctx2.CallToolResult
-	for _, node := range i.Nodes {
-		lastResp, err = node.Process(ctx, userCmd, userParamMap, lastResp)
+	var nodeMap = task_nodes.GetNodeInstanceMap()
+	nodeInstances, ok := nodeMap.GetNodesByChainId(i.ChainInfo.ChainID)
+	if !ok {
+		logger.Error("未找到链", zap.Int32("chain_id", i.ChainInfo.ChainID))
+		return
+	}
+	for _, instance := range nodeInstances {
+		lastResp, err = instance.Node.Process(ctx, userCmd, userParamMap, lastResp)
 		if err != nil {
-			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", node.GetNodeInfo().NodeName))
+			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
 		}
 	}
