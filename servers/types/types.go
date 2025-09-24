@@ -14,6 +14,7 @@ type RunningContext struct {
 	Stats     map[string]interface{}               `json:"stats"`      // 其他信息
 }
 
+// CallToolResult 工具调用结果
 type CallToolResult struct {
 	Result           *mcp.CallToolResult
 	StructuredResult interface{}

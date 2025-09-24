@@ -1,7 +1,7 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/server/pools"
+	"AgentEarth_AgentPlatform/servers/pools"
 	"context"
 	"fmt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
