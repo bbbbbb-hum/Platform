@@ -7,12 +7,20 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type ToolDesc struct {
+	ToolName string
+	ToolDesc string
+	// ToolInputSchema string
+	// ToolOutputSchema string
+	// ToolMeta map[string]interface{}
+}
+
 // Node 节点接口 - 定义节点的基本行为
 type Node interface {
 	// 初始化单个task_nodes数据库记录的实例
 	Init(config InitConfig) error
 	// 获取该节点支持的工具列表
-	GetTools(ctx *types.RunningContext) (currentToolList []*mcp.Tool)
+	GetTools(ctx *types.RunningContext, ***) (currentToolList []*ToolDesc)
 	// 处理工具调用
 	Process(ctx *types.RunningContext,
 		userCmd string,
@@ -25,8 +33,8 @@ type Node interface {
 type (
 	// InitConfig 节点初始化参数
 	InitConfig struct {
-		ChianID   int32
-		ServerID  string
+		ChianID   int32  //??
+		ServerID  string //??
 		NodeModel *models.AeMcpTaskNode
 	}
 	// NodeInfo 节点基本信息
@@ -41,7 +49,7 @@ type (
 	NodeInstance struct {
 		Node     Node        //节点实现的接口
 		NodeInfo *NodeInfo   //节点信息
-		Tools    []*mcp.Tool // 节点支持的工具
+		Tools    []*mcp.Tool // 节点支持的工具 //??
 	}
 )
 

@@ -54,17 +54,22 @@ func (e *EchoNode) Init(config InitConfig) error {
 	return nil
 }
 
-func (e *EchoNode) GetTools(rc *types.RunningContext) (currentToolList []*mcp.Tool) {
-	// 获取上下文中工具列表
-	currentToolList = rc.Tools
-	// todo 处理上下文中工具，可以增删改查
-
-	// 将当前节点生成的工具列表加入到工具列表中
-	currentToolList = append(currentToolList, e.Tools...)
-	return
+func (e *EchoNode) GetTools(rc *types.RunningContext) (currentToolList []*ToolDesc) {
+	currentToolList = append(currentToolList, &ToolDesc{
+		ToolName: e.Tools[0].Name,
+		ToolDesc: e.Tools[0].Description,
+	})
+	return currentToolList
 }
 func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
+
 	currentResp = lastStepResp
+
+	//check userCmd
+	switch userCmd {
+	case e.Tools[0].Name:
+
+	}
 	// 检查是否为当前节点的 echo 工具调用参数
 	var text string
 	if v, ok := userParamMap["text"]; ok {

@@ -17,6 +17,7 @@ var McpServicesMap = map[string]*Server{}
 type Server struct {
 	mcpServer     *mcp.Server
 	ChainInstance *task_chain.ChainInstance
+	toolDescList  []*task_nodes.ToolDesc
 }
 
 func (s *Server) GetServer() *mcp.Server {
@@ -92,12 +93,17 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 将链挂到server下中
 	server.ChainInstance = chainInstance
 	// 获取工具列表并注册
-	toolsList := server.GetTools() //toolsmap不需要，放在server里面
+	server.toolDescList := server.ChainInstance.GetTools(&types.RunningContext{}) //toolsmap不需要，放在server里面
+
+	//
+	//根据server.toolDescList 注册mcp工具
+	//
 	for _, tool := range toolsList {
 		// 使用新的工具调用处理器
 		mcp.AddTool[map[string]interface{}](server.mcpServer, tool, server.OnCallTool)
 	}
 	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(toolsList)))
+
 	return server
 }
 
@@ -146,9 +152,4 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	//todo:处理一下返回给上层
 	// 其他业务逻辑处理
 	return resultMap[toolName].Result, resultMap[toolName].StructuredResult, nil
-}
-
-func (s *Server) GetTools() []*mcp.Tool {
-	s.ChainInstance.GetTools(&types.RunningContext{})
-	return nil
 }
