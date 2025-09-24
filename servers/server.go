@@ -3,6 +3,7 @@ package servers
 import (
 	"AgentEarth_AgentPlatform/models"
 	"AgentEarth_AgentPlatform/servers/task_chain"
+	"AgentEarth_AgentPlatform/servers/task_nodes"
 	"AgentEarth_AgentPlatform/servers/types"
 	"context"
 	"fmt"
@@ -93,16 +94,25 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 将链挂到server下中
 	server.ChainInstance = chainInstance
 	// 获取工具列表并注册
-	server.toolDescList := server.ChainInstance.GetTools(&types.RunningContext{}) //toolsmap不需要，放在server里面
+	server.toolDescList = server.ChainInstance.GetTools(&types.RunningContext{}) //toolsmap不需要，放在server里面
 
 	//
 	//根据server.toolDescList 注册mcp工具
 	//
-	for _, tool := range toolsList {
+	for _, tool := range server.toolDescList {
 		// 使用新的工具调用处理器
-		mcp.AddTool[map[string]interface{}](server.mcpServer, tool, server.OnCallTool)
+		mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
+			Meta: mcp.Meta{
+				"chain_id":  chainModel.Id,
+				"server_id": service.ServerId,
+			},
+			Name:        tool.ToolName,
+			Description: tool.ToolDesc,
+			Title:       fmt.Sprintf("%s Tool", tool.ToolName),
+			InputSchema: tool.ToolInputSchema,
+		}, server.OnCallTool)
 	}
-	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(toolsList)))
+	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(server.toolDescList)))
 
 	return server
 }

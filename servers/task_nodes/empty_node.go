@@ -3,15 +3,13 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/servers/types"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
 
 // EmptyNode 空节点，啥也不做，用于测试  A
 type EmptyNode struct {
-	NodeInfo *NodeInfo   //节点信息
-	Tools    []*mcp.Tool // 节点支持的工具
+	NodeInfo *NodeInfo //节点信息
 }
 
 // Init 初始化空节点
@@ -25,16 +23,15 @@ func (e *EmptyNode) Init(config InitConfig) error {
 		Enabled:     true,
 	}
 	// 空节点不提供任何工具
-	e.Tools = []*mcp.Tool{}
 	logger.Info("空节点初始化完成，不提供任何工具")
 	return nil
 }
 
 // GetTools 获取工具列表 - 空节点不提供任何工具
-func (e *EmptyNode) GetTools(rc *types.RunningContext) (currentToolList []*mcp.Tool) {
-	// 获取上下文中工具列表
-	currentToolList = rc.Tools
+func (e *EmptyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
 	// 空节点不添加任何工具
+	// 返回上一步的 工具列表
+	currentToolList = lastStepToolList
 	return
 }
 

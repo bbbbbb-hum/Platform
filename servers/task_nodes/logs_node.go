@@ -4,15 +4,13 @@ import (
 	"AgentEarth_AgentPlatform/servers/types"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
 
 // LogsNode 日志记录节点 - 只记录，不提供工具 C
 type LogsNode struct {
-	NodeInfo *NodeInfo   //节点信息
-	Tools    []*mcp.Tool // 节点支持的工具
+	NodeInfo *NodeInfo //节点信息
 }
 
 func (l *LogsNode) Init(config InitConfig) error {
@@ -28,14 +26,11 @@ func (l *LogsNode) Init(config InitConfig) error {
 	return nil
 }
 
-func (l *LogsNode) GetTools(rc *types.RunningContext) (currentToolList []*mcp.Tool) {
-	// 获取上下文中工具列表
-	currentToolList = rc.Tools
-	// todo 处理上下文中工具，可以增删改查
+func (l *LogsNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
+	currentToolList = lastStepToolList
+	// todo 处理工具列表，可以增删改查
 
 	// 将当前节点生成的工具列表加入到工具列表中
-	currentToolList = append(currentToolList, l.Tools...)
-
 	logger.Info("当前工具列表", zap.String("node_id", fmt.Sprint(l.NodeInfo.NodeID)), zap.Any("tools", currentToolList))
 	return
 }

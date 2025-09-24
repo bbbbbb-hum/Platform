@@ -8,8 +8,6 @@ import (
 
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type (
@@ -39,8 +37,6 @@ func (i *ChainInstance) Init(config InitConfig) error {
 		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeType); ok {
 			// 调用节点的Init方法，初始化节点
 			err = node.Init(task_nodes.InitConfig{
-				ServerID:  config.ServiceId,
-				ChianID:   config.ChainModel.Id,
 				NodeModel: nodeModel,
 			})
 			if err != nil {
@@ -51,7 +47,6 @@ func (i *ChainInstance) Init(config InitConfig) error {
 			nodeInstance := &task_nodes.NodeInstance{
 				Node:     node,
 				NodeInfo: node.GetNodeInfo(),
-				Tools:    node.GetTools(&types.RunningContext{}),
 			}
 			// 将node实例加到链的NodeInstances中
 			i.NodeInstances = append(i.NodeInstances, nodeInstance) //Node实例放在链实例中就够了，不需要额外的map
@@ -86,10 +81,11 @@ func (i *ChainInstance) GetChainInfo() *ChainInfo {
 	return i.ChainInfo
 }
 
-func (i *ChainInstance) GetTools(rc *types.RunningContext) []*mcp.Tool {
+func (i *ChainInstance) GetTools(rc *types.RunningContext) []*task_nodes.ToolDesc {
+	var lastStepToolList []*task_nodes.ToolDesc
 	for _, nodeInstance := range i.NodeInstances {
 		// 将处理后的工具添加到上下文中的tools中
-		rc.Tools = nodeInstance.Node.GetTools(rc)
+		lastStepToolList = nodeInstance.Node.GetTools(rc, lastStepToolList)
 	}
-	return rc.Tools
+	return lastStepToolList
 }

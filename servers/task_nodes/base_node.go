@@ -3,14 +3,13 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/models"
 	"AgentEarth_AgentPlatform/servers/types"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 type ToolDesc struct {
-	ToolName string
-	ToolDesc string
-	// ToolInputSchema string
+	ToolName        string
+	ToolDesc        string
+	ToolInputSchema *jsonschema.Schema
 	// ToolOutputSchema string
 	// ToolMeta map[string]interface{}
 }
@@ -20,7 +19,7 @@ type Node interface {
 	// 初始化单个task_nodes数据库记录的实例
 	Init(config InitConfig) error
 	// 获取该节点支持的工具列表
-	GetTools(ctx *types.RunningContext, ***) (currentToolList []*ToolDesc)
+	GetTools(ctx *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc)
 	// 处理工具调用
 	Process(ctx *types.RunningContext,
 		userCmd string,
@@ -33,8 +32,6 @@ type Node interface {
 type (
 	// InitConfig 节点初始化参数
 	InitConfig struct {
-		ChianID   int32  //??
-		ServerID  string //??
 		NodeModel *models.AeMcpTaskNode
 	}
 	// NodeInfo 节点基本信息
@@ -47,9 +44,8 @@ type (
 	}
 	// NodeInstance 节点实例
 	NodeInstance struct {
-		Node     Node        //节点实现的接口
-		NodeInfo *NodeInfo   //节点信息
-		Tools    []*mcp.Tool // 节点支持的工具 //??
+		Node     Node      //节点实现的接口
+		NodeInfo *NodeInfo //节点信息
 	}
 )
 
@@ -59,7 +55,7 @@ var NodeRegistry = map[string]func() Node{
 		return &EchoNode{}
 	},
 	"logs": func() Node {
-		return &LoggerNode{}
+		return &LogsNode{}
 	},
 	"empty": func() Node {
 		return &EmptyNode{}
