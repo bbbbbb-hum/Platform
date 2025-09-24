@@ -37,7 +37,7 @@ type (
 	// NodeInfo 节点基本信息
 	NodeInfo struct {
 		NodeID      int32  `json:"node_id"`     // 数据库中的节点ID
-		NodeType    string `json:"node_type"`   // 节点类型
+		NodeHandle  string `json:"node_handle"` // 节点执行函数
 		NodeName    string `json:"node_name"`   // 节点名称
 		Description string `json:"description"` // 节点描述
 		Enabled     bool   `json:"enabled"`     // 节点是否启用
@@ -51,13 +51,13 @@ type (
 
 // NodeRegistry 节点注册表 - 根据node_type创建对应的节点实例
 var NodeRegistry = map[string]func() Node{
-	"echo": func() Node {
+	"echo_handle": func() Node {
 		return &EchoNode{}
 	},
-	"logs": func() Node {
+	"logs_handle": func() Node {
 		return &LogsNode{}
 	},
-	"empty": func() Node {
+	"empty_handle": func() Node {
 		return &EmptyNode{}
 	},
 }

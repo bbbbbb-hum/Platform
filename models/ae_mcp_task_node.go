@@ -10,9 +10,8 @@ const TableNameAeMcpTaskNode = "ae_mcp_task_node"
 type AeMcpTaskNode struct {
 	Id          int32     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`   // 自增id
 	NodeName    string    `gorm:"column:node_name;not null" json:"node_name"`     // 节点名称
-	NodeType    string    `gorm:"column:node_type;not null" json:"node_type"`     // 节点类型
 	NodeHandle  string    `gorm:"column:node_handle;not null" json:"node_handle"` // 节点处理(处理函数名称)
-	Description string    `gorm:"column:description;not null" json:"description"` // 节点处理(处理函数名称)
+	Description string    `gorm:"column:description;not null" json:"description"` // 节点描述
 	Enabled     bool      `gorm:"column:enabled;default:false" json:"enabled"`    // 是否启用
 	CreateTime  time.Time `gorm:"column:create_time" json:"create_time"`          // 创建时间
 	UpdateTime  time.Time `gorm:"column:update_time" json:"update_time"`          // 更新时间

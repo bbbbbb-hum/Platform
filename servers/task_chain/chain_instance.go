@@ -34,7 +34,7 @@ func (i *ChainInstance) Init(config InitConfig) error {
 	// 初始化所有节点
 	for _, nodeModel := range nodeModels {
 		// 根据node_type获取对应的节点工厂函数来创建节点实例
-		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeType); ok {
+		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeHandle); ok {
 			// 调用节点的Init方法，初始化节点
 			err = node.Init(task_nodes.InitConfig{
 				NodeModel: nodeModel,

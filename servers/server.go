@@ -102,10 +102,6 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	for _, tool := range server.toolDescList {
 		// 使用新的工具调用处理器
 		mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
-			Meta: mcp.Meta{
-				"chain_id":  chainModel.Id,
-				"server_id": service.ServerId,
-			},
 			Name:        tool.ToolName,
 			Description: tool.ToolDesc,
 			Title:       fmt.Sprintf("%s Tool", tool.ToolName),
@@ -121,33 +117,11 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
 	toolName := req.Params.Name
 	logger.Info("处理工具调用", zap.String("tool_name", toolName), zap.Any("args", args))
-	// 获取链ID和服务ID
-	var chainID int32
-	var serviceID string
-	meta := req.Params.GetMeta()
-	if meta != nil {
-		//server自己有chain_id和server_id，不应该从请求中取
-		// 获取chain_id
-		if chainIDValue, exists := meta["chain_id"]; exists {
-			if chainIDInt32, ok := chainIDValue.(int32); ok {
-				chainID = chainIDInt32
-			} else if chainIDInt, ok := chainIDValue.(int); ok {
-				chainID = int32(chainIDInt)
-			} else if chainIDFloat, ok := chainIDValue.(float64); ok {
-				chainID = int32(chainIDFloat)
-			}
-		}
-		// 获取server_id
-		if serverIDValue, exists := meta["server_id"]; exists {
-			if serverIDStr, ok := serverIDValue.(string); ok {
-				serviceID = serverIDStr
-			}
-		}
-	}
+
 	// 创建节点上下文
 	ctxNode := &types.RunningContext{
-		ChainID:   chainID,
-		ServiceID: serviceID,
+		ChainID:   s.ChainInstance.ChainInfo.ChainID,
+		ServiceID: s.ChainInstance.ChainInfo.ServiceID,
 		ResultMap: make(map[int32]map[string]*types.CallToolResult),
 		Stats:     make(map[string]interface{}),
 	}

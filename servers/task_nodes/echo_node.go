@@ -22,7 +22,7 @@ func (e *EchoNode) Init(config InitConfig) error {
 	logger.Info("初始化回声工具节点", zap.String("node_id", string(config.NodeModel.Id)))
 	e.NodeInfo = &NodeInfo{
 		NodeID:      config.NodeModel.Id,
-		NodeType:    config.NodeModel.NodeType,
+		NodeHandle:  config.NodeModel.NodeHandle,
 		NodeName:    config.NodeModel.NodeName,
 		Description: config.NodeModel.Description,
 	}

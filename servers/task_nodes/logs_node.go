@@ -18,7 +18,7 @@ func (l *LogsNode) Init(config InitConfig) error {
 	// 初始化日志文件等
 	l.NodeInfo = &NodeInfo{
 		NodeID:      config.NodeModel.Id,
-		NodeType:    config.NodeModel.NodeType,
+		NodeHandle:  config.NodeModel.NodeHandle,
 		NodeName:    config.NodeModel.NodeName,
 		Description: config.NodeModel.Description,
 	}
