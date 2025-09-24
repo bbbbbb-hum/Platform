@@ -126,6 +126,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	var serviceID string
 	meta := req.Params.GetMeta()
 	if meta != nil {
+		//server自己有chain_id和server_id，不应该从请求中取
 		// 获取chain_id
 		if chainIDValue, exists := meta["chain_id"]; exists {
 			if chainIDInt32, ok := chainIDValue.(int32); ok {
