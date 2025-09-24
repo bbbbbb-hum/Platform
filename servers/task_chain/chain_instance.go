@@ -67,7 +67,7 @@ func (i *ChainInstance) Init(config InitConfig) error {
 			nodeInstanceMap.AddNode(config.ChainModel.Id, nodeInstance)
 
 			// 也加到链的Nodes中
-			i.Chain.Nodes = append(i.Chain.Nodes, node)
+			i.Chain.Nodes = append(i.Chain.Nodes, node) //Node实例放在链实例中就够了，不需要额外的map
 
 			logger.Info("成功初始化节点", zap.String("node_type", nodeModel.NodeType), zap.Int32("node_id", nodeModel.Id), zap.Int32("chain_id", config.ChainModel.Id))
 
