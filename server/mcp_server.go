@@ -199,7 +199,7 @@ func OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.C
 //{
 //
 //	for node in chanin.nodes:{
-//		node.Process(ctx,toolName="tool_1",toolParams)
+//		node.Process(types,toolName="tool_1",toolParams)
 //	}
 //
 //}
@@ -215,13 +215,13 @@ func OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args any) (*mcp.C
 //gaodeNode.GetTools(){
 //	return tools
 //}
-//gaodeNode.Process(ctx,toolName="tool_1",toolParams)
+//gaodeNode.Process(types,toolName="tool_1",toolParams)
 //{
-//	mapToolNameToMcp[toolName].callTool(ctx,toolName="tool_1",toolParams)
+//	mapToolNameToMcp[toolName].callTool(types,toolName="tool_1",toolParams)
 //}
 
 //mcpServer
 //|--tools:[]*mcp.Tool
 //|  |--name
 //|  |--description
-//|  |--CallTool(ctx,req,args)
+//|  |--CallTool(types,req,args)

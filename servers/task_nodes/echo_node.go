@@ -1,8 +1,7 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/servers/ctx"
-	"AgentEarth_AgentPlatform/servers/tools"
+	"AgentEarth_AgentPlatform/servers/types"
 	"fmt"
 	"reflect"
 	"time"
@@ -14,9 +13,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// EchoToolNode 回声工具节点 - 提供工具
+// EchoNode 回声工具节点 - 提供工具
 type EchoNode struct {
-	NodeInfo *NodeInfo
+	NodeInfo *NodeInfo   //节点信息
+	Tools    []*mcp.Tool // 节点支持的工具
 }
 
 func (e *EchoNode) Init(config InitConfig) error {
@@ -27,7 +27,7 @@ func (e *EchoNode) Init(config InitConfig) error {
 		NodeName:    config.NodeModel.NodeName,
 		Description: config.NodeModel.Description,
 	}
-	// 在初始化时注册工具到工具注册器
+	// 在初始化时将工具挂到节点上
 	echoParamsSchema, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{
 		IgnoreInvalidTypes: true,
 	})
@@ -49,25 +49,21 @@ func (e *EchoNode) Init(config InitConfig) error {
 		Description: "回声工具",
 		InputSchema: echoParamsSchema,
 	}
-	toolsMap := tools.GetToolsMap()
-	toolsMap.AddTool(config.ServerID, toolName, echoTool)
-
-	logger.Info("成功注册Echo工具", zap.String("tool_name", echoTool.Name))
+	e.Tools = append(e.Tools, echoTool)
+	logger.Info("Echo 新增了1个工具", zap.String("tool_name", echoTool.Name))
 	return nil
 }
 
-func (e *EchoNode) GetTools(ctx *ctx.RunningContext) (currentToolList []*mcp.Tool) {
-	// 获取工具列表
-	toolsMap := tools.GetToolsMap()
-	currentToolList = []*mcp.Tool{}
-	if toolsList, ok := toolsMap.GetServerTools(ctx.ServiceID); ok {
-		for _, tool := range toolsList {
-			currentToolList = append(currentToolList, tool)
-		}
-	}
+func (e *EchoNode) GetTools(rc *types.RunningContext) (currentToolList []*mcp.Tool) {
+	// 获取上下文中工具列表
+	currentToolList = rc.Tools
+	// todo 处理上下文中工具，可以增删改查
+
+	// 将当前节点生成的工具列表加入到工具列表中
+	currentToolList = append(currentToolList, e.Tools...)
 	return
 }
-func (e *EchoNode) Process(ctx *ctx.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*ctx.CallToolResult) (currentResp map[string]*ctx.CallToolResult, err error) {
+func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
 	currentResp = lastStepResp
 	// 检查是否为当前节点的 echo 工具调用参数
 	var text string
@@ -93,7 +89,7 @@ func (e *EchoNode) Process(ctx *ctx.RunningContext, userCmd string, userParamMap
 		"node_id":     e.NodeInfo.NodeID,
 	}
 	// 将结果保存到节点上下文
-	ctx.ResultMap[e.NodeInfo.NodeID] = currentResp
+	rc.ResultMap[e.NodeInfo.NodeID] = currentResp
 	return
 }
 

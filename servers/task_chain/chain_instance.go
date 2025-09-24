@@ -2,9 +2,8 @@ package task_chain
 
 import (
 	"AgentEarth_AgentPlatform/models"
-	"AgentEarth_AgentPlatform/servers/ctx"
-	ctx2 "AgentEarth_AgentPlatform/servers/ctx"
 	"AgentEarth_AgentPlatform/servers/task_nodes"
+	"AgentEarth_AgentPlatform/servers/types"
 	"fmt"
 
 	"github.com/wcs1010270451/helpers/logger"
@@ -14,38 +13,31 @@ import (
 )
 
 type (
+	// ChainInstance 任务链实例
 	ChainInstance struct {
-		*Chain
+		ChainInfo     *ChainInfo
+		NodeInstances []*task_nodes.NodeInstance
 	}
 )
 
-type InitConfig struct {
-	ServiceId  string
-	ChainModel *models.AeMcpTaskChain
-}
-
 func (i *ChainInstance) Init(config InitConfig) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(config.ChainModel.Id)))
-	i.Chain = &Chain{
-		ChainInfo: &ChainInfo{
-			ChainID:   config.ChainModel.Id,
-			ServiceID: config.ServiceId,
-		},
+	// 初始化链信息
+	i.ChainInfo = &ChainInfo{
+		ChainID:   config.ChainModel.Id,
+		ServiceID: config.ServiceId,
 	}
-	// 链上所有节点信息
+	// 获取链上所有节点数据
 	nodesModel := &models.AeMcpTaskNode{}
 	err, nodeModels := nodesModel.GetChianNodes(config.ChainModel.NodeIds)
 	if err != nil {
 		return fmt.Errorf("获取节点失败: %w", err)
 	}
-	// 获取NodeInstanceMap
-	nodeInstanceMap := task_nodes.GetNodeInstanceMap()
-
 	// 初始化所有节点
 	for _, nodeModel := range nodeModels {
-		// 根据node_type创建对应的节点实例
+		// 根据node_type获取对应的节点工厂函数来创建节点实例
 		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeType); ok {
-			// 调用节点的Init方法
+			// 调用节点的Init方法，初始化节点
 			err = node.Init(task_nodes.InitConfig{
 				ServerID:  config.ServiceId,
 				ChianID:   config.ChainModel.Id,
@@ -59,15 +51,10 @@ func (i *ChainInstance) Init(config InitConfig) error {
 			nodeInstance := &task_nodes.NodeInstance{
 				Node:     node,
 				NodeInfo: node.GetNodeInfo(),
-				Tools: node.GetTools(&ctx.RunningContext{
-					ServiceID: config.ServiceId,
-				}),
+				Tools:    node.GetTools(&types.RunningContext{}),
 			}
-			// 将instance放入NodeInstanceMap
-			nodeInstanceMap.AddNode(config.ChainModel.Id, nodeInstance)
-
-			// 也加到链的Nodes中
-			i.Chain.Nodes = append(i.Chain.Nodes, node) //Node实例放在链实例中就够了，不需要额外的map
+			// 将node实例加到链的NodeInstances中
+			i.NodeInstances = append(i.NodeInstances, nodeInstance) //Node实例放在链实例中就够了，不需要额外的map
 
 			logger.Info("成功初始化节点", zap.String("node_type", nodeModel.NodeType), zap.Int32("node_id", nodeModel.Id), zap.Int32("chain_id", config.ChainModel.Id))
 
@@ -79,17 +66,12 @@ func (i *ChainInstance) Init(config InitConfig) error {
 	return nil
 }
 
-func (i *ChainInstance) Process(ctx *ctx.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*ctx.CallToolResult, err error) {
+func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*types.CallToolResult, err error) {
 	// TODO: 节点处理逻辑
-	var lastResp map[string]*ctx2.CallToolResult
-	var nodeMap = task_nodes.GetNodeInstanceMap()
-	nodeInstances, ok := nodeMap.GetNodesByChainId(i.ChainInfo.ChainID)
-	if !ok {
-		logger.Error("未找到链", zap.Int32("chain_id", i.ChainInfo.ChainID))
-		return
-	}
-	for _, instance := range nodeInstances {
-		lastResp, err = instance.Node.Process(ctx, userCmd, userParamMap, lastResp)
+	var lastResp map[string]*types.CallToolResult
+
+	for _, instance := range i.NodeInstances {
+		lastResp, err = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
 		if err != nil {
 			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
@@ -100,16 +82,14 @@ func (i *ChainInstance) Process(ctx *ctx.RunningContext, userCmd string, userPar
 	return
 }
 
-func (i *ChainInstance) GetChain() *Chain {
-	return i.Chain
+func (i *ChainInstance) GetChainInfo() *ChainInfo {
+	return i.ChainInfo
 }
 
-func (i *ChainInstance) GetTools() []*mcp.Tool {
-	var tools []*mcp.Tool
-	for _, node := range i.Nodes {
-		tools = append(tools, node.GetTools(&ctx.RunningContext{
-			ServiceID: i.ChainInfo.ServiceID,
-		})...)
+func (i *ChainInstance) GetTools(rc *types.RunningContext) []*mcp.Tool {
+	for _, nodeInstance := range i.NodeInstances {
+		// 将处理后的工具添加到上下文中的tools中
+		rc.Tools = nodeInstance.Node.GetTools(rc)
 	}
-	return tools
+	return rc.Tools
 }
