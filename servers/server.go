@@ -93,7 +93,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	chainMap.AddChain(service.ServerId, chainInstance.Chain)
 
 	// 获取工具列表并注册
-	toolsMap := tools.GetToolsMap()
+	toolsMap := tools.GetToolsMap() //toolsmap不需要，放在server里面
 	if toolsList, ok := toolsMap.GetServerTools(service.ServerId); ok {
 		for _, tool := range toolsList {
 			// 使用新的工具调用处理器
