@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// EchoNode 回声工具节点 - 提供工具
+// EchoNode (简单的业务节点)回声工具节点 - 提供工具 B
 type EchoNode struct {
 	NodeInfo *NodeInfo   //节点信息
 	Tools    []*mcp.Tool // 节点支持的工具

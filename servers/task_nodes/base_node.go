@@ -3,6 +3,7 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/models"
 	"AgentEarth_AgentPlatform/servers/types"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -13,7 +14,10 @@ type Node interface {
 	// 获取该节点支持的工具列表
 	GetTools(ctx *types.RunningContext) (currentToolList []*mcp.Tool)
 	// 处理工具调用
-	Process(ctx *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error)
+	Process(ctx *types.RunningContext,
+		userCmd string,
+		userParamMap map[string]interface{},
+		lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error)
 	// 获取节点信息
 	GetNodeInfo() *NodeInfo
 }
@@ -47,7 +51,10 @@ var NodeRegistry = map[string]func() Node{
 		return &EchoNode{}
 	},
 	"logs": func() Node {
-		return &LogsNode{}
+		return &LoggerNode{}
+	},
+	"empty": func() Node {
+		return &EmptyNode{}
 	},
 }
 
