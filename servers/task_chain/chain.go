@@ -2,14 +2,14 @@ package task_chain
 
 import (
 	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/servers/task_nodes"
 	"AgentEarth_AgentPlatform/servers/types"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Chain interface {
 	Init(config InitConfig) error
 	Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*types.CallToolResult, err error)
-	GetTools(rc *types.RunningContext) []*mcp.Tool
+	GetTools(rc *types.RunningContext) []*task_nodes.ToolDesc
 	GetChainInfo() *ChainInfo
 }
 

@@ -48,7 +48,11 @@ func (e *EchoNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 	return currentToolList
 }
 func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
-	currentResp = lastStepResp
+	if lastStepResp != nil {
+		currentResp = lastStepResp
+	} else {
+		currentResp = make(map[string]*types.CallToolResult)
+	}
 	//check userCmd
 	switch userCmd {
 	case "Echo":
@@ -64,16 +68,17 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 			return
 		}
 		result := fmt.Sprintf("Echo: %s", text)
-
-		currentResp[userCmd].Result = &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: result},
+		currentResp[userCmd] = &types.CallToolResult{
+			Result: &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: result},
+				},
 			},
-		}
-		currentResp[userCmd].StructuredResult = map[string]interface{}{
-			"echoed_text": result,
-			"timestamp":   time.Now().Unix(),
-			"node_id":     e.NodeInfo.NodeID,
+			StructuredResult: map[string]interface{}{
+				"echoed_text": result,
+				"timestamp":   time.Now().Unix(),
+				"node_id":     e.NodeInfo.NodeID,
+			},
 		}
 		// 将结果保存到节点上下文
 		rc.ResultMap[e.NodeInfo.NodeID] = currentResp

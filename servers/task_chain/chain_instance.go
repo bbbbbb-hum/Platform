@@ -40,7 +40,7 @@ func (i *ChainInstance) Init(config InitConfig) error {
 				NodeModel: nodeModel,
 			})
 			if err != nil {
-				logger.Error("初始化节点失败", zap.Error(err), zap.String("node_type", nodeModel.NodeType), zap.Int32("node_id", nodeModel.Id))
+				logger.Error("初始化节点失败", zap.Error(err), zap.String("node_handle", nodeModel.NodeHandle), zap.Int32("node_id", nodeModel.Id))
 				continue
 			}
 			// 创建NodeInstance包装器
@@ -51,10 +51,10 @@ func (i *ChainInstance) Init(config InitConfig) error {
 			// 将node实例加到链的NodeInstances中
 			i.NodeInstances = append(i.NodeInstances, nodeInstance) //Node实例放在链实例中就够了，不需要额外的map
 
-			logger.Info("成功初始化节点", zap.String("node_type", nodeModel.NodeType), zap.Int32("node_id", nodeModel.Id), zap.Int32("chain_id", config.ChainModel.Id))
+			logger.Info("成功初始化节点", zap.String("node_handle", nodeModel.NodeHandle), zap.Int32("node_id", nodeModel.Id), zap.Int32("chain_id", config.ChainModel.Id))
 
 		} else {
-			logger.Error("不支持的节点类型", zap.String("node_type", nodeModel.NodeType), zap.Int32("node_id", nodeModel.Id))
+			logger.Error("不支持的节点类型", zap.String("node_handle", nodeModel.NodeHandle), zap.Int32("node_id", nodeModel.Id))
 		}
 	}
 
@@ -65,12 +65,13 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 	// TODO: 节点处理逻辑
 	var lastResp map[string]*types.CallToolResult
 
-	for _, instance := range i.NodeInstances {
+	for k, instance := range i.NodeInstances {
 		lastResp, err = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
 		if err != nil {
 			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
 		}
+		logger.Info("节点处理成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
 	}
 	// 可以在这里处理链的逻辑
 	currentResp = lastResp

@@ -116,8 +116,6 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 // OnCallTool 新的工具调用处理器
 func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
 	toolName := req.Params.Name
-	logger.Info("处理工具调用", zap.String("tool_name", toolName), zap.Any("args", args))
-
 	// 创建节点上下文
 	ctxNode := &types.RunningContext{
 		ChainID:   s.ChainInstance.ChainInfo.ChainID,
