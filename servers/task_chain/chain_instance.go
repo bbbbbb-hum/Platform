@@ -71,7 +71,7 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
 		}
-		logger.Info("节点处理成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
+		logger.Info("节点流转成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
 	}
 	// 可以在这里处理链的逻辑
 	currentResp = lastResp

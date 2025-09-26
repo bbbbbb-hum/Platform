@@ -3,10 +3,9 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/servers/types"
 	"fmt"
-	"reflect"
-	"time"
-
 	"github.com/google/jsonschema-go/jsonschema"
+	_type "github.com/wcs1010270451/helpers/type"
+	"reflect"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wcs1010270451/helpers/logger"
@@ -44,6 +43,7 @@ func (e *EchoNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 		ToolDesc:        "回声工具",
 		ToolInputSchema: echoParamsSchema,
 	})
+	e.NodeInfo.ToolNames = append(e.NodeInfo.ToolNames, "Echo")
 	logger.Info("Echo 新增了1个工具")
 	return currentToolList
 }
@@ -54,8 +54,8 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 		currentResp = make(map[string]*types.CallToolResult)
 	}
 	//check userCmd
-	switch userCmd {
-	case "Echo":
+	if len(e.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, e.NodeInfo.ToolNames) {
+		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 		// 检查是否为当前节点的 echo 工具调用参数
 		var text string
 		if v, ok := userParamMap["text"]; ok {
@@ -74,15 +74,13 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 					&mcp.TextContent{Text: result},
 				},
 			},
-			StructuredResult: map[string]interface{}{
-				"echoed_text": result,
-				"timestamp":   time.Now().Unix(),
-				"node_id":     e.NodeInfo.NodeID,
-			},
+			StructuredResult: nil,
 		}
 		// 将结果保存到节点上下文
 		rc.ResultMap[e.NodeInfo.NodeID] = currentResp
-	default:
+		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	} else {
+		logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 	}
 	return
 }

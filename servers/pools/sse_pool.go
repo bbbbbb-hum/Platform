@@ -3,6 +3,7 @@ package pools
 import (
 	"AgentEarth_AgentPlatform/models/config"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,14 +23,14 @@ type (
 	}
 	// SSEExternalService SSE外部服务
 	SSEExternalService struct {
-		Id          int32                                  // 远程MCP服务自增ID
-		ServiceId   string                                 // 远程MCP服务UUID
-		ServiceName string                                 // 远程MCP服务名称
-		MaxInstance int32                                  // 最大实例数
-		Tools       []*mcp.Tool                            // 远程工具列表
-		ConnectInfo *ConnectInfo                           // 连接配置信息
-		Accounts    []*ExternalAccount                     // 外部账户信息
-		InstanceMap map[string]*SSEExternalServiceInstance // 运行实例列表
+		Id                int32                                  // 远程MCP服务自增ID
+		ExternalServiceId string                                 // 远程MCP服务UUID
+		ServiceName       string                                 // 远程MCP服务名称
+		MaxInstance       int32                                  // 最大实例数
+		Tools             []*mcp.Tool                            // 远程工具列表
+		ConnectInfo       *ConnectInfo                           // 连接配置信息
+		Accounts          []*ExternalAccount                     // 外部账户信息
+		InstanceMap       map[string]*SSEExternalServiceInstance // 运行实例列表
 	}
 	// SSEExternalServiceInstance SSE外部服务实例
 	SSEExternalServiceInstance struct {
@@ -54,13 +55,13 @@ type (
 		ActiveUsers  int // 当前活跃用户数（可选，用于后期优化）
 	}
 	ConnectInfo struct {
-		Url            string            `json:"url"`                      // sse服务地址
-		Headers        map[string]string `json:"headers"`                  // 请求头
-		ConnectTimeout int               `json:"connect_timeout"`          //连接超时时间（毫秒）
-		MaxConnect     int               `json:"max_connect"`              //实例最大连接数
-		MaxRetry       int               `json:"max_retry"`                //最大重试次数
-		Interval       int               `json:"interval"`                 //重试间隔
-		ClientVersion  string            `json:"client_version,omitempty"` // 客户端版本（可选）
+		Url            string            `json:"url,omitempty"`             // sse服务地址
+		Headers        map[string]string `json:"headers,omitempty"`         // 请求头
+		ConnectTimeout int               `json:"connect_timeout,omitempty"` //连接超时时间（毫秒）
+		MaxConnect     int               `json:"max_connect,omitempty"`     //实例最大连接数
+		MaxRetry       int               `json:"max_retry,omitempty"`       //最大重试次数
+		Interval       int               `json:"interval,omitempty"`        //重试间隔
+		ClientVersion  string            `json:"client_version,omitempty"`  // 客户端版本（可选）
 	}
 
 	// headerTransport 自定义传输层，用于添加请求头
@@ -97,12 +98,13 @@ func (ht *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 // InitializeSSEPool 初始化SSE连接池
-func (p *SSEConnectionPool) InitializeSSEPool(serviceConfigId int32) error {
-	logger.Info("初始化SSE连接池...", zap.Int("id", int(serviceConfigId)))
-	err := p.initializeService(serviceConfigId)
+func (p *SSEConnectionPool) InitializeSSEPool(externalServiceId string) error {
+	logger.Info("初始化SSE连接池...", zap.String("external_service_id", externalServiceId))
+	ctx := context.Background()
+	err := p.initializeService(ctx, externalServiceId)
 	if err != nil {
 		logger.Error("创建远程连接失败",
-			zap.Int("id", int(serviceConfigId)),
+			zap.String("external_service_id", externalServiceId),
 			zap.Error(err))
 		return err
 	}
@@ -110,9 +112,9 @@ func (p *SSEConnectionPool) InitializeSSEPool(serviceConfigId int32) error {
 }
 
 // 初始化单个SSE服务
-func (p *SSEConnectionPool) initializeService(serviceConfigId int32) error {
+func (p *SSEConnectionPool) initializeService(ctx context.Context, externalServiceId string) error {
 	// 从数据库加载sse服务配置
-	service, err := p.loadSSEServiceConfigs(serviceConfigId)
+	service, err := p.loadSSEServiceConfigs(externalServiceId)
 	if err != nil {
 		return err
 	}
@@ -122,7 +124,7 @@ func (p *SSEConnectionPool) initializeService(serviceConfigId int32) error {
 		return err
 	}
 	// 创建实例信息
-	service, err = p.createInstances(service)
+	service, err = p.createInstances(ctx, service)
 	if err != nil {
 		return err
 	}
@@ -149,11 +151,11 @@ func (p *SSEConnectionPool) initializeService(serviceConfigId int32) error {
 	}
 	// 添加到连接池
 	p.mutex.Lock()
-	p.services[service.ServiceId] = service
+	p.services[service.ExternalServiceId] = service
 	p.mutex.Unlock()
 
 	logger.Info("服务初始化完成",
-		zap.String("service_id", service.ServiceId),
+		zap.String("external_service_id", service.ExternalServiceId),
 		zap.Int("账号数量", len(service.Accounts)),
 		zap.Int("工具数量", len(service.Tools)))
 
@@ -161,26 +163,33 @@ func (p *SSEConnectionPool) initializeService(serviceConfigId int32) error {
 }
 
 // loadSSEServiceConfigs 加载SSE服务配置
-func (p *SSEConnectionPool) loadSSEServiceConfigs(serviceConfigId int32) (service *SSEExternalService, err error) {
+func (p *SSEConnectionPool) loadSSEServiceConfigs(externalServiceId string) (service *SSEExternalService, err error) {
 	dbEsc := &config.AeMcpExternalServicesConfig{}
-	err = dbEsc.GetOne(serviceConfigId)
+	err = dbEsc.GetOneByExternalServiceId(externalServiceId)
 	if err != nil {
 		err = fmt.Errorf("加载远程服务配置失败: %v", err)
 		return
 	}
+
 	// 解析JSONB连接配置信息
 	var connectInfo ConnectInfo
-	err = dbEsc.ConnectInfo.Scan(&connectInfo)
+	connectInfoByte, err := json.Marshal(dbEsc.ConnectInfo)
+	if err != nil {
+		err = fmt.Errorf("解析连接配置失败: %v", err)
+		return
+	}
+	err = json.Unmarshal(connectInfoByte, &connectInfo)
 	if err != nil {
 		err = fmt.Errorf("解析连接配置失败: %v", err)
 		return
 	}
 	service = &SSEExternalService{
-		Id:          dbEsc.Id,
-		ServiceId:   dbEsc.ServiceId,
-		ServiceName: dbEsc.Name,
-		ConnectInfo: &connectInfo,
-		InstanceMap: make(map[string]*SSEExternalServiceInstance), // 初始化 InstanceMap
+		Id:                dbEsc.Id,
+		ExternalServiceId: dbEsc.ExternalServiceId,
+		ServiceName:       dbEsc.Name,
+		ConnectInfo:       &connectInfo,
+		MaxInstance:       dbEsc.MaxInstance,
+		InstanceMap:       make(map[string]*SSEExternalServiceInstance), // 初始化 InstanceMap
 	}
 	return
 }
@@ -218,7 +227,7 @@ func (p *SSEConnectionPool) loadAccountConfigs(service *SSEExternalService) (*SS
 }
 
 // createInstance 根据账号创建实例（如果没有账号信息，按照实例最大数配置）
-func (p *SSEConnectionPool) createInstances(service *SSEExternalService) (newService *SSEExternalService, err error) {
+func (p *SSEConnectionPool) createInstances(ctx context.Context, service *SSEExternalService) (newService *SSEExternalService, err error) {
 	newService = service
 	if service.ConnectInfo.Headers != nil {
 		//需要鉴权
@@ -244,7 +253,7 @@ func (p *SSEConnectionPool) createInstances(service *SSEExternalService) (newSer
 					Connections: make([]*ExternalConnection, 0),
 				}
 				//创建连接
-				instance.Connections, err = p.createConnections(&connectInfoCopy, service.Id, account.AccountID)
+				instance.Connections, err = p.createConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
 				if err != nil {
 					logger.Error("创建实例连接失败", zap.Error(err))
 					continue
@@ -261,7 +270,7 @@ func (p *SSEConnectionPool) createInstances(service *SSEExternalService) (newSer
 				Connections: make([]*ExternalConnection, 0),
 			}
 			//创建连接
-			instance.Connections, err = p.createConnections(service.ConnectInfo, service.Id, int32(i))
+			instance.Connections, err = p.createConnections(ctx, service.ConnectInfo, service.Id, int32(i))
 			if err != nil {
 				logger.Error("创建实例连接失败", zap.Error(err))
 				continue
@@ -273,12 +282,12 @@ func (p *SSEConnectionPool) createInstances(service *SSEExternalService) (newSer
 }
 
 // createConnections 创建连接
-func (p *SSEConnectionPool) createConnections(connectInfo *ConnectInfo, sid, aid int32) (connections []*ExternalConnection, err error) {
+func (p *SSEConnectionPool) createConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connections []*ExternalConnection, err error) {
 	logger.Info("创建连接...")
 
 	// 创建HTTP客户端
 	httpClient := &http.Client{
-		Timeout: time.Duration(connectInfo.ConnectTimeout) * time.Millisecond,
+		//Timeout: time.Duration(connectInfo.ConnectTimeout) * time.Millisecond,
 		Transport: &headerTransport{
 			Transport: http.DefaultTransport,
 			Headers:   connectInfo.Headers,
@@ -290,20 +299,23 @@ func (p *SSEConnectionPool) createConnections(connectInfo *ConnectInfo, sid, aid
 	})
 
 	// 创建MCP客户端
+	// 配置客户端选项，启用心跳
+	clientOpts := &mcp.ClientOptions{
+		KeepAlive: 30 * time.Second, // 每30秒发送一次心跳
+		// 心跳超时时间，建议为心跳间隔的2倍
+	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "AgentEarth-Proxy",
 		Version: "v1.0.0",
-	}, nil)
+	}, clientOpts)
 
 	// 创建多个连接
 	successCount := 0
 	for i := 0; i < connectInfo.MaxConnect; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(connectInfo.ConnectTimeout)*time.Millisecond)
 		session, err1 := client.Connect(ctx, transport, nil)
-		cancel()
 
 		if err1 != nil {
-			logger.Error("创建连接失败", zap.Error(err1))
+			logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
 			continue
 		}
 
@@ -390,17 +402,17 @@ func (p *SSEConnectionPool) CallTool(serviceID, toolName string, args map[string
 	connection.LastPing = time.Now()
 	// TODO: 在实际场景中，应该在请求开始时+1，请求结束时-1
 
-	return result, result, nil
+	return result, result.StructuredContent, nil
 }
 
 // getService 获取服务
-func (p *SSEConnectionPool) getService(serviceID string) (*SSEExternalService, error) {
+func (p *SSEConnectionPool) getService(externalServiceId string) (*SSEExternalService, error) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 
-	service, exists := p.services[serviceID]
+	service, exists := p.services[externalServiceId]
 	if !exists {
-		return nil, fmt.Errorf("服务不存在: %s", serviceID)
+		return nil, fmt.Errorf("服务不存在: %s", externalServiceId)
 	}
 	return service, nil
 }
@@ -430,10 +442,10 @@ func (p *SSEConnectionPool) selectConnection(instance *SSEExternalServiceInstanc
 }
 
 // GetServiceTools 获取单个服务工具列表
-func (p *SSEConnectionPool) GetServiceTools(serviceID string) []*mcp.Tool {
+func (p *SSEConnectionPool) GetServiceTools(externalServiceId string) []*mcp.Tool {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
-	service, exists := p.services[serviceID]
+	service, exists := p.services[externalServiceId]
 	if exists {
 		return service.Tools
 	}

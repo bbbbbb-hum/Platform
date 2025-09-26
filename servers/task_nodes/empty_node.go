@@ -2,8 +2,8 @@ package task_nodes
 
 import (
 	"AgentEarth_AgentPlatform/servers/types"
-
 	"github.com/wcs1010270451/helpers/logger"
+	_type "github.com/wcs1010270451/helpers/type"
 	"go.uber.org/zap"
 )
 
@@ -37,9 +37,20 @@ func (e *EmptyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolD
 
 // Process 处理工具调用 - 空节点什么都不做
 func (e *EmptyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
-	// 空节点什么都不做，直接返回上一步的结果
-	currentResp = lastStepResp
-	logger.Info("空节点处理完成，无任何操作", zap.Int32("node_id", e.NodeInfo.NodeID))
+	// 获取上一步的结果
+	if lastStepResp != nil {
+		currentResp = lastStepResp
+	} else {
+		currentResp = make(map[string]*types.CallToolResult)
+	}
+	// 判断当前节点是否处理
+	if len(e.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, e.NodeInfo.ToolNames) {
+		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+		//无处理
+		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	} else {
+		logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	}
 	return
 }
 

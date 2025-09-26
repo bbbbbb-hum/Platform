@@ -127,7 +127,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	//定义&实现I-B接口
 	//toolchain的返回值需要处理一下再返回给上层
 	//不需要toolMeta。输入的杂七杂八东西通过context传入；输出的杂七杂八也可以通过context带出来（比如responseMap）。
-
+	logger.Debug("开始处理", zap.String("tool_name", toolName))
 	resultMap, err := s.ChainInstance.Process(ctxNode, toolName, args)
 	if err != nil {
 		return nil, nil, err

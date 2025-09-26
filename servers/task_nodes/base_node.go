@@ -3,6 +3,7 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/models"
 	"AgentEarth_AgentPlatform/servers/types"
+
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -36,11 +37,13 @@ type (
 	}
 	// NodeInfo 节点基本信息
 	NodeInfo struct {
-		NodeID      int32  `json:"node_id"`     // 数据库中的节点ID
-		NodeHandle  string `json:"node_handle"` // 节点执行函数
-		NodeName    string `json:"node_name"`   // 节点名称
-		Description string `json:"description"` // 节点描述
-		Enabled     bool   `json:"enabled"`     // 节点是否启用
+		NodeID                  int32    `json:"node_id"`                    // 数据库中的节点ID
+		NodeHandle              string   `json:"node_handle"`                // 节点执行函数
+		NodeName                string   `json:"node_name"`                  // 节点名称
+		Description             string   `json:"description"`                // 节点描述
+		Enabled                 bool     `json:"enabled"`                    // 节点是否启用
+		ExternalServiceConfigID string   `json:"external_service_config_id"` // 外部服务配置ID
+		ToolNames               []string `json:"tool_names"`                 // 贡献过的工具名称
 	}
 	// NodeInstance 节点实例
 	NodeInstance struct {
@@ -59,6 +62,9 @@ var NodeRegistry = map[string]func() Node{
 	},
 	"empty_handle": func() Node {
 		return &EmptyNode{}
+	},
+	"search_handle": func() Node {
+		return &SearchNode{}
 	},
 }
 

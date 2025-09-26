@@ -3,7 +3,6 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/servers/types"
 	"fmt"
-
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
@@ -36,13 +35,18 @@ func (l *LogsNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 }
 
 func (l *LogsNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
-	currentResp = lastStepResp
-	// 打印当前节点数据
+	// 获取上一步的结果
+	if lastStepResp != nil {
+		currentResp = lastStepResp
+	} else {
+		currentResp = make(map[string]*types.CallToolResult)
+	}
+	// 日志节点不用判断，默认所有节点路过都打印日志
 	logger.Info("当前节点数据",
 		zap.String("node_id", fmt.Sprint(l.NodeInfo.NodeID)),
 		zap.String("user_cmd", userCmd),
 		zap.Any("user_param_map", userParamMap),
-		zap.Any("last_step_resp", currentResp))
+		zap.Any("current_resp", currentResp))
 	return
 }
 
