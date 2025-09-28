@@ -440,6 +440,8 @@ func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *Exter
 	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	if err1 != nil {
 		logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
+		err = err1
+		return
 	}
 
 	connection := &ExternalConnection{
