@@ -66,6 +66,9 @@ var NodeRegistry = map[string]func() Node{
 	"search_handle": func() Node {
 		return &SearchNode{}
 	},
+	"proxy_handle": func() Node {
+		return &ProxyNode{}
+	},
 }
 
 // CreateNodeByType 根据node_type创建节点实例
