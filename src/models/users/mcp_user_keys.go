@@ -1,7 +1,7 @@
 package users
 
 import (
-	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/src/models"
 	"time"
 
 	"gorm.io/datatypes"

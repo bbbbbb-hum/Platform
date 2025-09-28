@@ -1,10 +1,10 @@
 package main
 
 import (
-	"AgentEarth_AgentPlatform/boot"
-	"AgentEarth_AgentPlatform/config"
-	"AgentEarth_AgentPlatform/middleware"
-	"AgentEarth_AgentPlatform/servers"
+	boot2 "AgentEarth_AgentPlatform/src/boot"
+	"AgentEarth_AgentPlatform/src/config"
+	"AgentEarth_AgentPlatform/src/middleware"
+	"AgentEarth_AgentPlatform/src/servers"
 	"flag"
 	"net/http"
 	"strings"
@@ -30,9 +30,9 @@ func main() {
 	helperConfig.InitConfig(env)
 
 	// 初始化 Logger
-	boot.SetupLogger()
+	boot2.SetupLogger()
 	// 初始化 DB
-	boot.SetupDB()
+	boot2.SetupDB()
 
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {

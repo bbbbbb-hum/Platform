@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"AgentEarth_AgentPlatform/models"
-	"AgentEarth_AgentPlatform/models/users"
+	"AgentEarth_AgentPlatform/src/models"
+	"AgentEarth_AgentPlatform/src/models/users"
 	"fmt"
 	"net/http"
 	"time"

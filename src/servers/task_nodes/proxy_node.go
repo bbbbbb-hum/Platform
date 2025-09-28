@@ -1,8 +1,8 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/servers/pools"
-	"AgentEarth_AgentPlatform/servers/types"
+	"AgentEarth_AgentPlatform/src/servers/pools"
+	"AgentEarth_AgentPlatform/src/servers/types"
 
 	"github.com/wcs1010270451/helpers/logger"
 	_type "github.com/wcs1010270451/helpers/type"

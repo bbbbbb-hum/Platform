@@ -1,7 +1,7 @@
 package config
 
 import (
-	"AgentEarth_AgentPlatform/models"
+	"AgentEarth_AgentPlatform/src/models"
 	"gorm.io/datatypes"
 	"time"
 )

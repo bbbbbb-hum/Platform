@@ -1,8 +1,8 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/models"
-	"AgentEarth_AgentPlatform/servers/types"
+	"AgentEarth_AgentPlatform/src/models"
+	"AgentEarth_AgentPlatform/src/servers/types"
 
 	"github.com/google/jsonschema-go/jsonschema"
 )

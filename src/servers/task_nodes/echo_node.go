@@ -1,7 +1,7 @@
 package task_nodes
 
 import (
-	"AgentEarth_AgentPlatform/servers/types"
+	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
 	"github.com/google/jsonschema-go/jsonschema"
 	_type "github.com/wcs1010270451/helpers/type"

@@ -1,9 +1,9 @@
 package task_chain
 
 import (
-	"AgentEarth_AgentPlatform/models"
-	"AgentEarth_AgentPlatform/servers/task_nodes"
-	"AgentEarth_AgentPlatform/servers/types"
+	"AgentEarth_AgentPlatform/src/models"
+	"AgentEarth_AgentPlatform/src/servers/task_nodes"
+	"AgentEarth_AgentPlatform/src/servers/types"
 )
 
 type Chain interface {
