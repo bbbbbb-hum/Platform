@@ -350,7 +350,7 @@ func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *
 		// 心跳超时时间，建议为心跳间隔的2倍
 	}
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "AgentEarth-Proxy",
+		Name:    "AgentEarth-Proxy-SSE",
 		Version: "v1.0.0",
 	}, clientOpts)
 
@@ -436,8 +436,13 @@ func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *Exter
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, k))
 		}
 	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "AgentEarth-Proxy-Stdio",
+		Version: "v1.0.0",
+	}, nil)
 	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	logger.Debug("创建连接...", zap.Any("command", cmd))
+	logger.Debug("创建连接...", zap.Any("session", cmd))
 	if err1 != nil {
 		logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
 		err = err1
