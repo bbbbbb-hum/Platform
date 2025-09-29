@@ -9,6 +9,7 @@ import (
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 	"net/http"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -432,19 +433,27 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *ExternalService, aid, i int) (instance *ServiceInstance, err error) {
 	logger.Debug("创建连接...", zap.Any("service", service))
 	cmd := exec.Command(service.LaunchInfo.Command, service.LaunchInfo.Args...)
+
 	if len(service.LaunchInfo.Env) > 0 {
+		logger.Debug("获取ENV前..", zap.Any("env", cmd))
+		// 首先继承父进程的所有环境变量
+		cmd.Env = os.Environ()
+		// 然后添加自定义环境变量
 		for s, k := range service.LaunchInfo.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, k))
 		}
-		logger.Debug("for..", zap.Any("env", cmd.Env))
+		logger.Debug("获取ENV后..", zap.Any("env", cmd))
+	} else {
+		// 即使没有自定义环境变量，也要继承父进程环境变量
+		cmd.Env = os.Environ()
 	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "AgentEarth-Proxy-Stdio",
 		Version: "v1.0.0",
 	}, nil)
+	logger.Debug("连接前...", zap.Any("command", cmd))
 	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
-	logger.Debug("创建连接...", zap.Any("command", cmd))
-	logger.Debug("创建连接...", zap.Any("session", session))
+	logger.Debug("连接后...", zap.Any("session", session))
 	if err1 != nil {
 		logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
 		err = err1
