@@ -435,14 +435,22 @@ func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *Exter
 	cmd := exec.Command(service.LaunchInfo.Command, service.LaunchInfo.Args...)
 
 	if len(service.LaunchInfo.Env) > 0 {
-		logger.Debug("获取ENV前..", zap.Any("env", cmd))
 		// 首先继承父进程的所有环境变量
 		cmd.Env = os.Environ()
 		// 然后添加自定义环境变量
 		for s, k := range service.LaunchInfo.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, k))
 		}
-		logger.Debug("获取ENV后..", zap.Any("env", cmd))
+		logger.Debug("环境变量设置完成",
+			zap.Int("total_env_vars", len(cmd.Env)),
+			zap.Int("custom_env_vars", len(service.LaunchInfo.Env)),
+			zap.Strings("custom_vars", func() []string {
+				var customs []string
+				for s, k := range service.LaunchInfo.Env {
+					customs = append(customs, fmt.Sprintf("%s=%s", s, k))
+				}
+				return customs
+			}()))
 	} else {
 		// 即使没有自定义环境变量，也要继承父进程环境变量
 		cmd.Env = os.Environ()
