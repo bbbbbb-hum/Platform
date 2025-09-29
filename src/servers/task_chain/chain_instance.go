@@ -5,6 +5,7 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/task_nodes"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
@@ -75,6 +76,18 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 	}
 	// 可以在这里处理链的逻辑
 	currentResp = lastResp
+	if len(currentResp) == 0 {
+		currentResp[userCmd] = &types.CallToolResult{
+			Result: &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{
+						Text: "未获取到结果",
+					},
+				},
+			},
+			StructuredResult: nil,
+		}
+	}
 	return
 }
 
