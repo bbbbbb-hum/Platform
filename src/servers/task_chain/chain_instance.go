@@ -65,11 +65,12 @@ func (i *ChainInstance) Init(config InitConfig) error {
 func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*types.CallToolResult, err error) {
 	// TODO: 节点处理逻辑
 	var lastResp map[string]*types.CallToolResult
-
+	var err1 error
+	lastResp = make(map[string]*types.CallToolResult)
 	for k, instance := range i.NodeInstances {
-		lastResp, err = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
-		if err != nil {
-			logger.Error("节点处理失败", zap.Error(err), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
+		lastResp, err1 = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
+		if err1 != nil {
+			logger.Error("节点处理失败", zap.Error(err1), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
 		}
 		logger.Info("节点流转成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
