@@ -430,6 +430,7 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 }
 
 func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *ExternalService, aid, i int) (instance *ServiceInstance, err error) {
+	logger.Debug("创建连接...", zap.Any("service", service))
 	cmd := exec.Command(service.LaunchInfo.Command, service.LaunchInfo.Args...)
 	if len(service.LaunchInfo.Env) > 0 {
 		for s, k := range service.LaunchInfo.Env {
@@ -442,7 +443,7 @@ func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *Exter
 	}, nil)
 	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	logger.Debug("创建连接...", zap.Any("command", cmd))
-	logger.Debug("创建连接...", zap.Any("session", cmd))
+	logger.Debug("创建连接...", zap.Any("session", session))
 	if err1 != nil {
 		logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
 		err = err1
