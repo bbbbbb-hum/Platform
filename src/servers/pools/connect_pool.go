@@ -436,6 +436,7 @@ func (c *ConnectionPool) createStdioInstance(ctx context.Context, service *Exter
 		for s, k := range service.LaunchInfo.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, k))
 		}
+		logger.Debug("for..", zap.Any("env", cmd.Env))
 	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "AgentEarth-Proxy-Stdio",
