@@ -79,7 +79,7 @@ func createMcpServer(service *models2.AeMcpServices) *Server {
 		logger.Error("获取任务链失败", zap.Error(err))
 		return nil
 	}
-	//chainMap := task_chain.GetChainMap()
+
 	// 创建ChainInstance
 	chainInstance := &task_chain2.ChainInstance{}
 	// 初始化链（这里会初始化所有节点实例）
@@ -94,7 +94,7 @@ func createMcpServer(service *models2.AeMcpServices) *Server {
 	// 将链挂到server下中
 	server.ChainInstance = chainInstance
 	// 获取工具列表并注册
-	server.toolDescList = server.ChainInstance.GetTools(&types.RunningContext{}) //toolsmap不需要，放在server里面
+	server.toolDescList = server.ChainInstance.GetTools(&types.RunningContext{})
 
 	//
 	//根据server.toolDescList 注册mcp工具
@@ -134,5 +134,6 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	}
 	//todo:处理一下返回给上层
 	// 其他业务逻辑处理
-	return resultMap[toolName].Result, resultMap[toolName].StructuredResult, nil
+	result := resultMap[toolName].Result
+	return result, result.StructuredContent, nil
 }

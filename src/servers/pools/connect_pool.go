@@ -5,19 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wcs1010270451/helpers/logger"
-	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/wcs1010270451/helpers/logger"
+	"go.uber.org/zap"
 )
 
 type (
 	ConnectionPool struct {
-		services map[string]*ExternalService
+		services map[string]*ExternalService // key是服务ID
 		mutex    sync.RWMutex
 	}
 	// 外部服务定义
