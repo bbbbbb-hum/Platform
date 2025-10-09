@@ -1,20 +1,50 @@
 package types
 
 import (
+	"AgentEarth_AgentPlatform/src/models"
+
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// RunningContext 节点上下文 - 在节点间传递数据
-type RunningContext struct {
-	// 链级别信息
-	ServiceID string                               `json:"service_id"`
-	ChainID   int32                                `json:"chain_id"`
-	ResultMap map[int32]map[string]*CallToolResult `json:"result_map"` // 结果数据 map[nodeId]map[tool_name]mcp结果
-	Stats     map[string]interface{}               `json:"stats"`      // 其他信息
-}
+type (
+	// RunningContext 节点上下文 - 在节点间传递数据
+	RunningContext struct {
+		// 链级别信息
+		ServiceID string                 `json:"service_id"`
+		ChainID   int32                  `json:"chain_id"`
+		Stats     map[string]interface{} `json:"stats"` // 其他信息
+	}
+	ToolDesc struct {
+		ToolName        string
+		ToolDesc        string
+		ToolInputSchema *jsonschema.Schema
+	}
+	InitConfig struct {
+		ServiceID  string `json:"service_id"`
+		ChainModel *models.AeMcpTaskChain
+		NodeModel  *models.AeMcpTaskNode
+	}
 
-// CallToolResult 工具调用结果
-type CallToolResult struct {
-	Result           *mcp.CallToolResult
-	StructuredResult interface{}
+	// NodeInstance 节点实例
+	NodeInstance struct {
+		NodeInfo *NodeInfo
+		Node     Processor //节点实现的接口
+	}
+	NodeInfo struct {
+		NodeID                  int32    `json:"node_id"`                    // 数据库中的节点ID
+		NodeHandle              string   `json:"node_handle"`                // 节点执行函数
+		NodeName                string   `json:"node_name"`                  // 节点名称
+		Description             string   `json:"description"`                // 节点描述
+		Enabled                 bool     `json:"enabled"`                    // 节点是否启用
+		ExternalServiceConfigID string   `json:"external_service_config_id"` // 外部服务配置ID
+		ToolNames               []string `json:"tool_names"`                 // 贡献过的工具名称
+	}
+)
+
+type Processor interface {
+	Init(config InitConfig) error
+	Process(rc *RunningContext, userCmd string, userParamMap map[string]interface{}, lastResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error)
+	GetTools(rc *RunningContext) []*ToolDesc
+	GetNodeInfo() *NodeInfo
 }

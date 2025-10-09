@@ -493,11 +493,11 @@ func (c *ConnectionPool) fetchTools(session *mcp.ClientSession) (list []*mcp.Too
 }
 
 // CallTool 调用工具（支持指定实例或自动选择）
-func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]interface{}, instanceID ...string) (*mcp.CallToolResult, interface{}, error) {
+func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]interface{}, instanceID ...string) (*mcp.CallToolResult, error) {
 	// 获取服务
 	service, err := c.getService(serviceID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 选择实例
@@ -506,7 +506,7 @@ func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]in
 		// 使用指定账号
 		instance = service.InstanceMap[instanceID[0]]
 		if instance == nil {
-			return nil, nil, fmt.Errorf("账号不存在: %s", instanceID[0])
+			return nil, fmt.Errorf("账号不存在: %s", instanceID[0])
 		}
 	} else {
 		// 自动选择账号（选择第一个可用的）
@@ -517,14 +517,14 @@ func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]in
 			}
 		}
 		if instance == nil {
-			return nil, nil, fmt.Errorf("没有可用的账号")
+			return nil, fmt.Errorf("没有可用的账号")
 		}
 	}
 
 	// 选择连接
 	connection := c.selectConnection(instance)
 	if connection == nil {
-		return nil, nil, fmt.Errorf("没有可用的连接")
+		return nil, fmt.Errorf("没有可用的连接")
 	}
 
 	// 调用工具
@@ -535,14 +535,14 @@ func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]in
 
 	result, err := connection.Session.CallTool(context.Background(), params)
 	if err != nil {
-		return nil, nil, fmt.Errorf("工具调用失败: %v", err)
+		return nil, fmt.Errorf("工具调用失败: %v", err)
 	}
 
 	// 更新连接状态（这里简化处理，实际应该在请求完成后减少ActiveUsers）
 	connection.LastPing = time.Now()
 	connection.ActiveUsers++
 
-	return result, result.StructuredContent, nil
+	return result, nil
 }
 
 // getService 获取服务

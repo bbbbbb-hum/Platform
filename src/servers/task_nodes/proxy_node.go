@@ -6,18 +6,19 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
 )
 
 // ProxyNode SSE代理节点，用于代理SSE类型的MCP服务
 type ProxyNode struct {
-	NodeInfo *NodeInfo //节点信息
+	NodeInfo *types.NodeInfo //节点信息
 }
 
 // Init 初始化SSE代理节点
-func (p *ProxyNode) Init(config InitConfig) error {
+func (p *ProxyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化代理节点", zap.String("node_id", string(config.NodeModel.Id)))
-	p.NodeInfo = &NodeInfo{
+	p.NodeInfo = &types.NodeInfo{
 		NodeID:                  config.NodeModel.Id,
 		NodeHandle:              config.NodeModel.NodeHandle,
 		NodeName:                config.NodeModel.NodeName,
@@ -40,9 +41,7 @@ func (p *ProxyNode) Init(config InitConfig) error {
 }
 
 // GetTools 获取工具列表 - 从外部MCP服务获取工具
-func (p *ProxyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
-	// 获取上一步的工具列表
-	currentToolList = lastStepToolList
+func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 
 	// 从连接池获取外部服务的工具
 	if p.NodeInfo.ExternalServiceConfigID != "" {
@@ -55,7 +54,7 @@ func (p *ProxyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolD
 			if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
 				tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
 			}
-			currentToolList = append(currentToolList, &ToolDesc{
+			currentToolList = append(currentToolList, &types.ToolDesc{
 				ToolDesc:        tool.Description,
 				ToolInputSchema: tool.InputSchema,
 				ToolName:        tool.Name,
@@ -68,31 +67,22 @@ func (p *ProxyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolD
 }
 
 // Process 处理工具调用 - 调用外部MCP服务
-func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
+func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
 		currentResp = lastStepResp
-	} else {
-		currentResp = make(map[string]*types.CallToolResult)
 	}
 
 	// 检查是否为当前节点处理的工具
 	if len(p.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, p.NodeInfo.ToolNames) {
 		logger.Debug("代理节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
 		// 调用必应的MCP服务的工具
-		callToolResult, structuredResult, err1 := pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)
-		if err1 != nil {
-			err = err1
+		currentResp, err = pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)
+		if err != nil {
 			return
 		}
-		logger.Debug("代理工具结果", zap.Any("result", callToolResult))
+		logger.Debug("代理工具结果", zap.Any("result", currentResp))
 		// 调用外部MCP服务
-		currentResp[userCmd] = &types.CallToolResult{
-			Result:           callToolResult,
-			StructuredResult: structuredResult,
-		}
-		// 将结果保存到节点上下文
-		rc.ResultMap[p.NodeInfo.NodeID] = currentResp
 		logger.Debug("代理节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
 	} else {
 		logger.Debug("代理节点不处理此工具", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
@@ -101,6 +91,6 @@ func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 }
 
 // GetNodeInfo 获取节点信息
-func (p *ProxyNode) GetNodeInfo() *NodeInfo {
+func (p *ProxyNode) GetNodeInfo() *types.NodeInfo {
 	return p.NodeInfo
 }

@@ -16,12 +16,12 @@ import (
 
 // EchoNode (简单的业务节点)回声工具节点 - 提供工具 B
 type EchoNode struct {
-	NodeInfo *NodeInfo //节点信息
+	NodeInfo *types.NodeInfo //节点信息
 }
 
-func (e *EchoNode) Init(config InitConfig) error {
+func (e *EchoNode) Init(config types.InitConfig) error {
 	logger.Info("初始化回声工具节点", zap.String("node_id", string(config.NodeModel.Id)))
-	e.NodeInfo = &NodeInfo{
+	e.NodeInfo = &types.NodeInfo{
 		NodeID:      config.NodeModel.Id,
 		NodeHandle:  config.NodeModel.NodeHandle,
 		NodeName:    config.NodeModel.NodeName,
@@ -30,8 +30,8 @@ func (e *EchoNode) Init(config InitConfig) error {
 	return nil
 }
 
-func (e *EchoNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
-	currentToolList = lastStepToolList
+func (e *EchoNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
+	//currentToolList = lastStepToolList
 	// 增加一个工具
 	echoParamsSchema, err := jsonschema.ForType(reflect.TypeOf(EchoParams{}), &jsonschema.ForOptions{
 		IgnoreInvalidTypes: true,
@@ -40,7 +40,7 @@ func (e *EchoNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 		logger.Error("转换工具参数失败", zap.Error(err))
 		return
 	}
-	currentToolList = append(currentToolList, &ToolDesc{
+	currentToolList = append(currentToolList, &types.ToolDesc{
 		ToolName:        "Echo",
 		ToolDesc:        "回声工具",
 		ToolInputSchema: echoParamsSchema,
@@ -49,11 +49,10 @@ func (e *EchoNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 	logger.Info("Echo 新增了1个工具")
 	return currentToolList
 }
-func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
+
+func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	if lastStepResp != nil {
 		currentResp = lastStepResp
-	} else {
-		currentResp = make(map[string]*types.CallToolResult)
 	}
 	//check userCmd
 	if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
@@ -70,16 +69,12 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 			return
 		}
 		result := fmt.Sprintf("Echo: %s", text)
-		currentResp[userCmd] = &types.CallToolResult{
-			Result: &mcp.CallToolResult{
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: result},
-				},
+		currentResp = &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: result},
 			},
-			StructuredResult: nil,
+			StructuredContent: nil,
 		}
-		// 将结果保存到节点上下文
-		rc.ResultMap[e.NodeInfo.NodeID] = currentResp
 		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 	} else {
 		logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
@@ -88,7 +83,7 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 }
 
 // GetNodeInfo 获取节点信息
-func (e *EchoNode) GetNodeInfo() *NodeInfo {
+func (e *EchoNode) GetNodeInfo() *types.NodeInfo {
 	return e.NodeInfo
 }
 

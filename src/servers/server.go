@@ -4,7 +4,6 @@ import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/task_chain"
-	"AgentEarth_AgentPlatform/src/servers/task_nodes"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"context"
 	"fmt"
@@ -18,7 +17,7 @@ var McpServicesMap = map[string]*Server{}
 type Server struct {
 	mcpServer     *mcp.Server
 	ChainInstance *task_chain.ChainInstance
-	toolDescList  []*task_nodes.ToolDesc
+	toolDescList  []*types.ToolDesc
 }
 
 func (s *Server) GetServer() *mcp.Server {
@@ -83,8 +82,8 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 创建ChainInstance
 	chainInstance := &task_chain.ChainInstance{}
 	// 初始化链（这里会初始化所有节点实例）
-	err = chainInstance.Init(task_chain.InitConfig{
-		ServiceId:  service.ServerId,
+	err = chainInstance.Init(types.InitConfig{
+		ServiceID:  service.ServerId,
 		ChainModel: chainModel,
 	})
 	if err != nil {
@@ -118,22 +117,15 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	toolName := req.Params.Name
 	// 创建节点上下文
 	ctxNode := &types.RunningContext{
-		ChainID:   s.ChainInstance.ChainInfo.ChainID,
-		ServiceID: s.ChainInstance.ChainInfo.ServiceID,
-		ResultMap: make(map[int32]map[string]*types.CallToolResult),
+		ChainID:   s.ChainInstance.ChainID,
+		ServiceID: s.ChainInstance.ServerID,
 		Stats:     make(map[string]interface{}),
 	}
-	// 通过任务链处理工具调用
-	//定义&实现I-B接口
-	//toolchain的返回值需要处理一下再返回给上层
-	//不需要toolMeta。输入的杂七杂八东西通过context传入；输出的杂七杂八也可以通过context带出来（比如responseMap）。
 	logger.Debug("开始处理", zap.String("tool_name", toolName))
-	resultMap, err := s.ChainInstance.Process(ctxNode, toolName, args)
+	// 链处理
+	result, err := s.ChainInstance.Process(ctxNode, toolName, args)
 	if err != nil {
 		return nil, nil, err
 	}
-	//todo:处理一下返回给上层
-	// 其他业务逻辑处理
-	result := resultMap[toolName].Result
 	return result, result.StructuredContent, nil
 }

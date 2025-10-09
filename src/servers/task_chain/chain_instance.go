@@ -15,18 +15,19 @@ import (
 type (
 	// ChainInstance 任务链实例
 	ChainInstance struct {
-		ChainInfo     *ChainInfo
-		NodeInstances []*task_nodes.NodeInstance
+		ServerID      string
+		ChainID       int32
+		NodeInstances []*types.NodeInstance
 	}
 )
 
-func (i *ChainInstance) Init(config InitConfig) error {
+func (i *ChainInstance) Init(config types.InitConfig) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(config.ChainModel.Id)))
 	// 初始化链信息
-	i.ChainInfo = &ChainInfo{
-		ChainID:   config.ChainModel.Id,
-		ServiceID: config.ServiceId,
-	}
+	//i.Info = &types.ProcessInfo{
+	//	ChainID:   config.ChainModel.Id,
+	//	ServiceID: config.ServiceID,
+	//}
 	// 获取链上所有节点数据
 	nodesModel := &models.AeMcpTaskNode{}
 	err, nodeModels := nodesModel.GetChianNodes(config.ChainModel.NodeIds)
@@ -38,7 +39,7 @@ func (i *ChainInstance) Init(config InitConfig) error {
 		// 根据node_type获取对应的节点工厂函数来创建节点实例
 		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeHandle); ok {
 			// 调用节点的Init方法，初始化节点
-			err = node.Init(task_nodes.InitConfig{
+			err = node.Init(types.InitConfig{
 				NodeModel: nodeModel,
 			})
 			if err != nil {
@@ -46,7 +47,7 @@ func (i *ChainInstance) Init(config InitConfig) error {
 				continue
 			}
 			// 创建NodeInstance包装器
-			nodeInstance := &task_nodes.NodeInstance{
+			nodeInstance := &types.NodeInstance{
 				Node:     node,
 				NodeInfo: node.GetNodeInfo(),
 			}
@@ -63,11 +64,10 @@ func (i *ChainInstance) Init(config InitConfig) error {
 	return nil
 }
 
-func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp map[string]*types.CallToolResult, err error) {
+func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp *mcp.CallToolResult, err error) {
 	// TODO: 节点处理逻辑
-	var lastResp map[string]*types.CallToolResult
+	var lastResp *mcp.CallToolResult
 	var err1 error
-	lastResp = make(map[string]*types.CallToolResult)
 	for k, instance := range i.NodeInstances {
 		lastResp, err1 = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
 		if err1 != nil {
@@ -78,30 +78,29 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 	}
 	// 可以在这里处理链的逻辑
 	currentResp = lastResp
-	if len(currentResp) == 0 {
-		currentResp[userCmd] = &types.CallToolResult{
-			Result: &mcp.CallToolResult{
-				Content: []mcp.Content{
-					&mcp.TextContent{
-						Text: "未获取到结果",
-					},
+	if currentResp == nil {
+		currentResp = &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{
+					Text: "未获取到结果",
 				},
 			},
-			StructuredResult: nil,
+			StructuredContent: nil,
 		}
 	}
 	return
 }
 
-func (i *ChainInstance) GetChainInfo() *ChainInfo {
-	return i.ChainInfo
-}
-
-func (i *ChainInstance) GetTools(rc *types.RunningContext) []*task_nodes.ToolDesc {
-	var lastStepToolList []*task_nodes.ToolDesc
+func (i *ChainInstance) GetTools(rc *types.RunningContext) []*types.ToolDesc {
+	var lastStepToolList []*types.ToolDesc
 	for _, nodeInstance := range i.NodeInstances {
 		// 将处理后的工具添加到上下文中的tools中
-		lastStepToolList = nodeInstance.Node.GetTools(rc, lastStepToolList)
+		lastStepToolList = append(lastStepToolList, nodeInstance.Node.GetTools(rc)...)
 	}
 	return lastStepToolList
+}
+
+// GetNodeInfo 获取节点信息
+func (i *ChainInstance) GetNodeInfo() *types.NodeInfo {
+	return &types.NodeInfo{}
 }

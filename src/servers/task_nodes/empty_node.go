@@ -5,18 +5,19 @@ import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/servers/types"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
 )
 
 // EmptyNode 空节点，啥也不做，用于测试  A
 type EmptyNode struct {
-	NodeInfo *NodeInfo //节点信息
+	NodeInfo *types.NodeInfo //节点信息
 }
 
 // Init 初始化空节点
-func (e *EmptyNode) Init(config InitConfig) error {
+func (e *EmptyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化空节点", zap.String("node_id", string(config.NodeModel.Id)))
-	e.NodeInfo = &NodeInfo{
+	e.NodeInfo = &types.NodeInfo{
 		NodeID:      config.NodeModel.Id,
 		NodeHandle:  config.NodeModel.NodeHandle,
 		NodeName:    config.NodeModel.NodeName,
@@ -29,20 +30,16 @@ func (e *EmptyNode) Init(config InitConfig) error {
 }
 
 // GetTools 获取工具列表 - 空节点不提供任何工具
-func (e *EmptyNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
+func (e *EmptyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 	// 空节点不添加任何工具
-	// 返回上一步的 工具列表
-	currentToolList = lastStepToolList
 	return
 }
 
 // Process 处理工具调用 - 空节点什么都不做
-func (e *EmptyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
+func (e *EmptyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
 		currentResp = lastStepResp
-	} else {
-		currentResp = make(map[string]*types.CallToolResult)
 	}
 	// 判断当前节点是否处理
 	if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
@@ -56,6 +53,6 @@ func (e *EmptyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 }
 
 // GetNodeInfo 获取节点信息
-func (e *EmptyNode) GetNodeInfo() *NodeInfo {
+func (e *EmptyNode) GetNodeInfo() *types.NodeInfo {
 	return e.NodeInfo
 }

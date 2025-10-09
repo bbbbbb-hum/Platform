@@ -5,18 +5,19 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
 )
 
 // LogsNode 日志记录节点 - 只记录，不提供工具 C
 type LogsNode struct {
-	NodeInfo *NodeInfo //节点信息
+	NodeInfo *types.NodeInfo //节点信息
 }
 
-func (l *LogsNode) Init(config InitConfig) error {
+func (l *LogsNode) Init(config types.InitConfig) error {
 	logger.Info("初始化日志节点", zap.String("node_id", fmt.Sprint(config.NodeModel.Id)))
 	// 初始化日志文件等
-	l.NodeInfo = &NodeInfo{
+	l.NodeInfo = &types.NodeInfo{
 		NodeID:      config.NodeModel.Id,
 		NodeHandle:  config.NodeModel.NodeHandle,
 		NodeName:    config.NodeModel.NodeName,
@@ -26,8 +27,7 @@ func (l *LogsNode) Init(config InitConfig) error {
 	return nil
 }
 
-func (l *LogsNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDesc) (currentToolList []*ToolDesc) {
-	currentToolList = lastStepToolList
+func (l *LogsNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 	// todo 处理工具列表，可以增删改查
 
 	// 将当前节点生成的工具列表加入到工具列表中
@@ -35,12 +35,10 @@ func (l *LogsNode) GetTools(rc *types.RunningContext, lastStepToolList []*ToolDe
 	return
 }
 
-func (l *LogsNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp map[string]*types.CallToolResult) (currentResp map[string]*types.CallToolResult, err error) {
+func (l *LogsNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
 		currentResp = lastStepResp
-	} else {
-		currentResp = make(map[string]*types.CallToolResult)
 	}
 	// 日志节点不用判断，默认所有节点路过都打印日志
 	logger.Info("当前节点数据",
@@ -51,6 +49,7 @@ func (l *LogsNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 	return
 }
 
-func (l *LogsNode) GetNodeInfo() *NodeInfo {
+// GetNodeInfo 获取节点信息
+func (l *LogsNode) GetNodeInfo() *types.NodeInfo {
 	return l.NodeInfo
 }
