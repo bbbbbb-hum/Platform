@@ -1,14 +1,16 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
+
 	"github.com/google/jsonschema-go/jsonschema"
-	_type "github.com/wcs1010270451/helpers/type"
+
+	"AgentEarth_AgentPlatform/src/helpers"
 	"reflect"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +56,7 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 		currentResp = make(map[string]*types.CallToolResult)
 	}
 	//check userCmd
-	if len(e.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, e.NodeInfo.ToolNames) {
+	if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
 		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 		// 检查是否为当前节点的 echo 工具调用参数
 		var text string

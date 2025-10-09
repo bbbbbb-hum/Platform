@@ -1,8 +1,8 @@
 package models
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/database"
 	"fmt"
-	"github.com/wcs1010270451/helpers/database"
 	"gorm.io/gorm"
 )
 

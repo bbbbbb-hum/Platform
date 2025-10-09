@@ -1,19 +1,19 @@
 package main
 
 import (
-	boot2 "AgentEarth_AgentPlatform/src/boot"
+	"AgentEarth_AgentPlatform/src/boot"
 	"AgentEarth_AgentPlatform/src/config"
+	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/middleware"
 	"AgentEarth_AgentPlatform/src/servers"
 	"flag"
 	"net/http"
 	"strings"
 
-	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	helperConfig "github.com/wcs1010270451/helpers/config"
 )
 
 func init() {
@@ -30,9 +30,9 @@ func main() {
 	helperConfig.InitConfig(env)
 
 	// 初始化 Logger
-	boot2.SetupLogger()
+	boot.SetupLogger()
 	// 初始化 DB
-	boot2.SetupDB()
+	boot.SetupDB()
 
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {

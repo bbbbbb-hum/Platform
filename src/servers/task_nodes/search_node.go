@@ -1,9 +1,10 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/servers/types"
-	"github.com/wcs1010270451/helpers/logger"
-	_type "github.com/wcs1010270451/helpers/type"
+
 	"go.uber.org/zap"
 )
 
@@ -52,7 +53,7 @@ func (s *SearchNode) Process(rc *types.RunningContext, userCmd string, userParam
 	} else {
 		currentResp = make(map[string]*types.CallToolResult)
 	}
-	if len(s.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, s.NodeInfo.ToolNames) {
+	if len(s.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, s.NodeInfo.ToolNames) {
 		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", s.NodeInfo.NodeID))
 		logger.Info("整合搜索结果...", zap.Any("currentResp", currentResp))
 		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", s.NodeInfo.NodeID))

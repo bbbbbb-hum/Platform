@@ -1,8 +1,8 @@
 package boot
 
 import (
-	"github.com/wcs1010270451/helpers/config"
-	"github.com/wcs1010270451/helpers/logger"
+	"AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 )
 
 // SetupLogger 初始化 Logger

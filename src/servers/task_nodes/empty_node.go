@@ -1,9 +1,10 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/servers/types"
-	"github.com/wcs1010270451/helpers/logger"
-	_type "github.com/wcs1010270451/helpers/type"
+
 	"go.uber.org/zap"
 )
 
@@ -44,7 +45,7 @@ func (e *EmptyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 		currentResp = make(map[string]*types.CallToolResult)
 	}
 	// 判断当前节点是否处理
-	if len(e.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, e.NodeInfo.ToolNames) {
+	if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
 		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 		//无处理
 		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))

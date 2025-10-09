@@ -1,7 +1,8 @@
 package pools
 
 import (
-	config2 "AgentEarth_AgentPlatform/src/models/config"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/models/config"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
 
@@ -111,7 +111,7 @@ func GetConnectPool() *ConnectionPool {
 // InitializeConnectPool 初始化连接池
 func (c *ConnectionPool) InitializeConnectPool() error {
 	logger.Info("初始化连接池...")
-	externalServiceConfigModel := config2.AeMcpExternalServicesConfig{}
+	externalServiceConfigModel := config.AeMcpExternalServicesConfig{}
 	list, err := externalServiceConfigModel.GetList()
 	if err != nil {
 		logger.Error("获取外部服务列表失败", zap.Error(err))
@@ -196,7 +196,7 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 // 加载服务配置
 func (c *ConnectionPool) loadServiceConfigs(externalServiceId string) (service *ExternalService, err error) {
 	logger.Info("加载外部服务配置...", zap.String("external_service_id", externalServiceId))
-	externalServiceConfigModel := config2.AeMcpExternalServicesConfig{}
+	externalServiceConfigModel := config.AeMcpExternalServicesConfig{}
 	err = externalServiceConfigModel.GetOneByExternalServiceId(externalServiceId)
 	if err != nil {
 		logger.Error("获取外部服务配置失败", zap.String("external_service_id", externalServiceId), zap.Error(err))
@@ -244,7 +244,7 @@ func (c *ConnectionPool) loadServiceConfigs(externalServiceId string) (service *
 func (c *ConnectionPool) loadAccountConfigs(service *ExternalService) (*ExternalService, error) {
 	// 从数据库加载账号配置
 	if service.ConnectInfo.Headers != nil {
-		var accountModel = config2.AeMcpExternalServicesAccount{}
+		var accountModel = config.AeMcpExternalServicesAccount{}
 		accounts, err := accountModel.GetListByConfigId(service.Id)
 		if err != nil {
 			return service, fmt.Errorf("加载账号配置失败: %v", err)

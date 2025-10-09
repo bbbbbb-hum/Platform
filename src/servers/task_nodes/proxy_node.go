@@ -1,11 +1,11 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 
-	"github.com/wcs1010270451/helpers/logger"
-	_type "github.com/wcs1010270451/helpers/type"
 	"go.uber.org/zap"
 )
 
@@ -77,7 +77,7 @@ func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 	}
 
 	// 检查是否为当前节点处理的工具
-	if len(p.NodeInfo.ToolNames) > 0 && _type.InStrArray(userCmd, p.NodeInfo.ToolNames) {
+	if len(p.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, p.NodeInfo.ToolNames) {
 		logger.Debug("代理节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
 		// 调用必应的MCP服务的工具
 		callToolResult, structuredResult, err1 := pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)

@@ -1,15 +1,15 @@
 package servers
 
 import (
-	models2 "AgentEarth_AgentPlatform/src/models"
-	task_chain2 "AgentEarth_AgentPlatform/src/servers/task_chain"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/models"
+	"AgentEarth_AgentPlatform/src/servers/task_chain"
 	"AgentEarth_AgentPlatform/src/servers/task_nodes"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"context"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ var McpServicesMap = map[string]*Server{}
 
 type Server struct {
 	mcpServer     *mcp.Server
-	ChainInstance *task_chain2.ChainInstance
+	ChainInstance *task_chain.ChainInstance
 	toolDescList  []*task_nodes.ToolDesc
 }
 
@@ -28,7 +28,7 @@ func (s *Server) GetServer() *mcp.Server {
 func Initialize() error {
 	logger.Info("开始初始化MCP服务...")
 	// 获取所有MCP服务配置
-	serviceModel := &models2.AeMcpServices{}
+	serviceModel := &models.AeMcpServices{}
 	err, serviceList := serviceModel.GetList()
 	if err != nil {
 		return fmt.Errorf("获取MCP服务列表失败: %w", err)
@@ -60,7 +60,7 @@ func Initialize() error {
 	return nil
 }
 
-func createMcpServer(service *models2.AeMcpServices) *Server {
+func createMcpServer(service *models.AeMcpServices) *Server {
 	server := &Server{}
 
 	// 根据配置创建MCP服务器实例
@@ -73,7 +73,7 @@ func createMcpServer(service *models2.AeMcpServices) *Server {
 	server.mcpServer = mcp.NewServer(implementation, nil)
 
 	// 初始化任务链
-	chainModel := &models2.AeMcpTaskChain{}
+	chainModel := &models.AeMcpTaskChain{}
 	err := chainModel.GetOne(service.TaskChainId)
 	if err != nil {
 		logger.Error("获取任务链失败", zap.Error(err))
@@ -81,9 +81,9 @@ func createMcpServer(service *models2.AeMcpServices) *Server {
 	}
 
 	// 创建ChainInstance
-	chainInstance := &task_chain2.ChainInstance{}
+	chainInstance := &task_chain.ChainInstance{}
 	// 初始化链（这里会初始化所有节点实例）
-	err = chainInstance.Init(task_chain2.InitConfig{
+	err = chainInstance.Init(task_chain.InitConfig{
 		ServiceId:  service.ServerId,
 		ChainModel: chainModel,
 	})

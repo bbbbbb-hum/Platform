@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	helperConfig "github.com/wcs1010270451/helpers/config"
-	"github.com/wcs1010270451/helpers/logger"
+	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 )
 
 type AuthMiddleware struct {

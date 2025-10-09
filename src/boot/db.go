@@ -1,14 +1,15 @@
 package boot
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"fmt"
 	"time"
 
-	"github.com/wcs1010270451/helpers/config"
-	"github.com/wcs1010270451/helpers/database"
-	"github.com/wcs1010270451/helpers/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"AgentEarth_AgentPlatform/src/helpers/database"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -33,8 +34,8 @@ func SetupDB() {
 		})
 	case "sqlite":
 		// 初始化 sqlite
-		database := config.Get("database.sqlite.database")
-		dbConfig = sqlite.Open(database)
+		db := config.Get("database.sqlite.database")
+		dbConfig = sqlite.Open(db)
 
 	case "postgres":
 		// 构建 DSN 信息

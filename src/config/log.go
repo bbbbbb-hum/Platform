@@ -1,6 +1,6 @@
 package config
 
-import "github.com/wcs1010270451/helpers/config"
+import "AgentEarth_AgentPlatform/src/helpers/config"
 
 func init() {
 	config.Add("log", func() map[string]interface{} {
