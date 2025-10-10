@@ -752,7 +752,7 @@ func (c *ConnectionPool) maintainOnce() {
 		services = append(services, s)
 	}
 	c.mutex.RUnlock()
-
+	logger.Debug("检查连接状态...")
 	for _, svc := range services {
 		// 遍历所有实例
 		for _, inst := range svc.InstanceMap {
@@ -785,6 +785,7 @@ func (c *ConnectionPool) maintainOnce() {
 			// 4) 若不足则补齐（使用实例内目标连接数）
 			target := inst.TargetConnections
 			// 补齐数量
+			var i int
 			for {
 				inst.mutex.Lock()
 				current := len(inst.Connections)
@@ -803,10 +804,13 @@ func (c *ConnectionPool) maintainOnce() {
 				// 追加（加锁）
 				inst.mutex.Lock()
 				inst.Connections = append(inst.Connections, newConn)
+				i++
 				inst.mutex.Unlock()
 			}
+			logger.Debug("恢复连接", zap.Int("数量", i))
 		}
 	}
+	logger.Debug("检查连接状态完成")
 }
 
 // isSessionHealthy 使用轻量操作检测会话健康

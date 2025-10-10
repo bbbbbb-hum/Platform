@@ -7,9 +7,11 @@ import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/middleware"
 	"AgentEarth_AgentPlatform/src/servers"
+	"AgentEarth_AgentPlatform/src/servers/pools"
 	"flag"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -40,6 +42,9 @@ func main() {
 		logger.Error("初始化MCP服务失败", zap.Error(err))
 		return
 	}
+
+	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
+	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
 	// 初始化 mcp 服务
 	//test1Server := server.NewServer()
