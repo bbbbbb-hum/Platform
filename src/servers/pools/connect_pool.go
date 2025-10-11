@@ -286,7 +286,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 					TargetConnections:   service.ConnectInfo.MaxConnect,
 				}
 				//创建连接
-				instance.Connections, err = c.createSSEConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
+				instance.Connections, err = c.createSSEConnections(ctx, &connectInfoCopy, service.Id, account.AccountID, service.ConnectInfo.MaxConnect)
 				if err != nil {
 					logger.Error("创建实例连接失败", zap.Error(err))
 					continue
@@ -305,7 +305,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 				TargetConnections:   service.ConnectInfo.MaxConnect,
 			}
 			//创建连接
-			instance.Connections, err = c.createSSEConnections(ctx, service.ConnectInfo, service.Id, int32(i))
+			instance.Connections, err = c.createSSEConnections(ctx, service.ConnectInfo, service.Id, int32(i), service.ConnectInfo.MaxConnect)
 			if err != nil {
 				logger.Error("创建实例连接失败", zap.Error(err))
 				continue
@@ -318,7 +318,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 }
 
 // 创建SSE连接
-func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connections []*ExternalConnection, err error) {
+func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32, connectsNum int) (connections []*ExternalConnection, err error) {
 	logger.Info("创建SSE连接...")
 
 	// 创建HTTP客户端
@@ -346,7 +346,7 @@ func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *
 
 	// 创建多个连接
 	successCount := 0
-	for i := 0; i < connectInfo.MaxConnect; i++ {
+	for i := 0; i < connectsNum; i++ {
 		session, err1 := client.Connect(ctx, transport, nil)
 
 		if err1 != nil {
@@ -781,7 +781,6 @@ func (c *ConnectionPool) maintainOnce() {
 			inst.mutex.Lock()
 			inst.Connections = healthy
 			inst.mutex.Unlock()
-			inst.Connections[0].Session.Ping(context.Background(), nil)
 			// 4) 若不足则补齐（使用实例内目标连接数）
 			target := inst.TargetConnections
 			// 补齐数量
@@ -824,51 +823,31 @@ func (c *ConnectionPool) isSessionHealthy(session *mcp.ClientSession) bool {
 
 // createReplacementConnection 针对实例按服务类型创建一个新连接
 func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, inst *ServiceInstance, index int) (*ExternalConnection, error) {
+	ctx := context.Background()
 	switch svc.Type {
 	case "sse":
-		var (
-			ctx    context.Context
-			cancel context.CancelFunc
-		)
-		if svc.ConnectInfo != nil && svc.ConnectInfo.ConnectTimeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), time.Duration(svc.ConnectInfo.ConnectTimeout)*time.Millisecond)
-		} else {
-			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		}
-		defer cancel()
 		// 优先使用实例快照
 		ci := inst.ResolvedConnectInfo
 		if ci == nil {
 			ci = c.buildConnectInfoForInstance(svc, inst)
 		}
-		return c.createSSEConnectionSingle(ctx, ci, svc.Id, inst.AccountId, index)
-	case "httpStreamable":
-		var (
-			ctx    context.Context
-			cancel context.CancelFunc
-		)
-		if svc.ConnectInfo != nil && svc.ConnectInfo.ConnectTimeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), time.Duration(svc.ConnectInfo.ConnectTimeout)*time.Millisecond)
-		} else {
-			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		connects, err := c.createSSEConnections(ctx, ci, svc.Id, inst.AccountId, 1)
+		if err != nil {
+			return nil, err
 		}
-		defer cancel()
+		if len(connects) > 0 {
+			return connects[0], nil
+		} else {
+			return nil, nil
+		}
+	case "httpStreamable":
+
 		ci := inst.ResolvedConnectInfo
 		if ci == nil {
 			ci = c.buildConnectInfoForInstance(svc, inst)
 		}
 		return c.createHttpStreamableConnections(ctx, ci, svc.Id, inst.AccountId)
 	case "stdio":
-		var (
-			ctx    context.Context
-			cancel context.CancelFunc
-		)
-		if svc.LaunchInfo != nil && svc.LaunchInfo.LaunchTimeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), time.Duration(svc.LaunchInfo.LaunchTimeout)*time.Millisecond)
-		} else {
-			ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
-		}
-		defer cancel()
 		li := inst.ResolvedLaunchInfo
 		if li == nil {
 			li = c.buildLaunchInfoForInstance(svc, inst)
@@ -916,38 +895,4 @@ func findAccountById(accounts []*ExternalAccount, id int32) *ExternalAccount {
 		}
 	}
 	return nil
-}
-
-// createSSEConnectionSingle 创建单个 SSE 连接
-func (c *ConnectionPool) createSSEConnectionSingle(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32, idx int) (connection *ExternalConnection, err error) {
-	// 创建HTTP客户端
-	httpClient := &http.Client{
-		Transport: &headerTransport{
-			Transport: http.DefaultTransport,
-			Headers:   connectInfo.Headers,
-		},
-	}
-	// 创建MCP传输
-	transport := mcp.NewSSEClientTransport(connectInfo.Url, &mcp.SSEClientTransportOptions{
-		HTTPClient: httpClient,
-	})
-	// MCP 客户端，开启心跳
-	clientOpts := &mcp.ClientOptions{
-		KeepAlive: 30 * time.Second,
-	}
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "AgentEarth-Proxy-SSE",
-		Version: "v1.0.0",
-	}, clientOpts)
-	session, err1 := client.Connect(ctx, transport, nil)
-	if err1 != nil {
-		return nil, err1
-	}
-	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d_%d", sid, aid, idx),
-		Session:      session,
-		LastPing:     time.Now(),
-		ActiveUsers:  0,
-	}
-	return
 }

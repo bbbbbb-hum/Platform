@@ -23,11 +23,6 @@ type (
 
 func (i *ChainInstance) Init(config types.InitConfig) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(config.ChainModel.Id)))
-	// 初始化链信息
-	//i.Info = &types.ProcessInfo{
-	//	ChainID:   config.ChainModel.Id,
-	//	ServiceID: config.ServiceID,
-	//}
 	// 获取链上所有节点数据
 	nodesModel := &models.AeMcpTaskNode{}
 	err, nodeModels := nodesModel.GetChianNodes(config.ChainModel.NodeIds)
