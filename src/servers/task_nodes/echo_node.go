@@ -53,9 +53,6 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 	if lastStepResp != nil {
 		currentResp = lastStepResp
 	}
-	//check userCmd
-	//if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
-	//	logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 	// 检查是否为当前节点的 echo 工具调用参数
 	var text string
 	if v, ok := userParamMap["text"]; ok {
@@ -74,10 +71,6 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 		},
 		StructuredContent: nil,
 	}
-	//logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
-	//} else {
-	//	logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
-	//}
 	return
 }
 

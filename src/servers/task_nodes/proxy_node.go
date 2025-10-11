@@ -72,20 +72,12 @@ func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 		currentResp = lastStepResp
 	}
 
-	// 检查是否为当前节点处理的工具
-	//if len(p.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, p.NodeInfo.ToolNames) {
-	//	logger.Debug("代理节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
 	// 调用必应的MCP服务的工具
 	currentResp, err = pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)
 	if err != nil {
 		return
 	}
 	logger.Debug("代理工具结果", zap.Any("result", currentResp))
-	//	// 调用外部MCP服务
-	//	logger.Debug("代理节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
-	//} else {
-	//	logger.Debug("代理节点不处理此工具", zap.String("tool_name", userCmd), zap.Int32("node_id", p.NodeInfo.NodeID))
-	//}
 	return
 }
 
