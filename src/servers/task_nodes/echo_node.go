@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 
-	"AgentEarth_AgentPlatform/src/helpers"
 	"reflect"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -55,30 +54,30 @@ func (e *EchoNode) Process(rc *types.RunningContext, userCmd string, userParamMa
 		currentResp = lastStepResp
 	}
 	//check userCmd
-	if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
-		logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
-		// 检查是否为当前节点的 echo 工具调用参数
-		var text string
-		if v, ok := userParamMap["text"]; ok {
-			if s, ok := v.(string); ok {
-				text = s
-			}
+	//if len(e.NodeInfo.ToolNames) > 0 && helpers.InStrArray(userCmd, e.NodeInfo.ToolNames) {
+	//	logger.Debug("当前节点开始处理...", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	// 检查是否为当前节点的 echo 工具调用参数
+	var text string
+	if v, ok := userParamMap["text"]; ok {
+		if s, ok := v.(string); ok {
+			text = s
 		}
-		if text == "" {
-			err = fmt.Errorf("echo工具缺少参数")
-			return
-		}
-		result := fmt.Sprintf("Echo: %s", text)
-		currentResp = &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: result},
-			},
-			StructuredContent: nil,
-		}
-		logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
-	} else {
-		logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
 	}
+	if text == "" {
+		err = fmt.Errorf("echo工具缺少参数")
+		return
+	}
+	result := fmt.Sprintf("Echo: %s", text)
+	currentResp = &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: result},
+		},
+		StructuredContent: nil,
+	}
+	//logger.Debug("当前节点处理完成", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	//} else {
+	//	logger.Debug("当前节点不处理", zap.String("tool_name", userCmd), zap.Int32("node_id", e.NodeInfo.NodeID))
+	//}
 	return
 }
 

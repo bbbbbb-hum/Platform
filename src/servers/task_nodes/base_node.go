@@ -23,7 +23,7 @@ var NodeRegistry = map[string]func() types.Processor{
 // CreateNodeByType 根据node_type创建节点实例
 func CreateNodeByType(nodeType string) (types.Processor, bool) {
 	if factory, exists := NodeRegistry[nodeType]; exists {
-		return factory(), true
+		return types.WithPre(factory()), true
 	}
 	return nil, false
 }

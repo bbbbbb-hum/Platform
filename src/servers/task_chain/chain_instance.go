@@ -64,12 +64,13 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 	var lastResp *mcp.CallToolResult
 	var err1 error
 	for k, instance := range i.NodeInstances {
+		logger.Debug("节点流转开始...", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
 		lastResp, err1 = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
 		if err1 != nil {
 			logger.Error("节点处理失败", zap.Error(err1), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
 			continue
 		}
-		logger.Info("节点流转成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
+		logger.Debug("节点流转成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
 	}
 	// 可以在这里处理链的逻辑
 	currentResp = lastResp
