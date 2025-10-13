@@ -6,10 +6,13 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/task_chain"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 var McpServicesMap = map[string]*Server{}
@@ -98,6 +101,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	//
 	//根据server.toolDescList 注册mcp工具
 	//
+	var toolModelList = []*models.AeMcpTools{}
 	for _, tool := range server.toolDescList {
 		// 使用新的工具调用处理器
 		mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
@@ -106,7 +110,46 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 			Title:       fmt.Sprintf("%s Tool", tool.ToolName),
 			InputSchema: tool.ToolInputSchema,
 		}, server.OnCallTool)
+		var schemaMap map[string]interface{}
+		if tool.ToolInputSchema != nil {
+			b, err1 := json.Marshal(tool.ToolInputSchema)
+			if err1 != nil {
+				logger.Error("ToolInputSchema json.Marshal失败", zap.Error(err1))
+				return nil
+			}
+			if err = json.Unmarshal(b, &schemaMap); err != nil {
+				logger.Error("ToolInputSchema json.Unmarshal失败", zap.Error(err1))
+				return nil
+			}
+		}
+		//新增工具
+		toolModel := models.AeMcpTools{
+			Id:          0,
+			ServiceId:   service.Id,
+			Name:        tool.ToolName,
+			Description: tool.ToolDesc,
+			ArgsSchema:  schemaMap,
+			CreateTime:  time.Now(),
+			UpdateTime:  time.Now(),
+		}
+		toolModelList = append(toolModelList, &toolModel)
 	}
+	if len(toolModelList) > 0 {
+		db := models.GetDB()
+		err = db.Transaction(func(tx *gorm.DB) error {
+			if err = tx.Where("service_id=?", service.Id).Delete(&models.AeMcpTools{}).Error; err != nil {
+				return err
+			}
+			if err = tx.Create(toolModelList).Error; err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			logger.Error("更新工具列表失败~", zap.Error(err))
+		}
+	}
+
 	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(server.toolDescList)))
 
 	return server

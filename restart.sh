@@ -35,14 +35,14 @@ echo "========================================"
 echo
 
 # 后台启动服务并保存PID
-nohup ./bin/agent-platform --env=$ENV > storage/logs/service.log 2>&1 &
+nohup ./bin/agent-platform --env=$ENV >> storage/logs/service-$(date +%F).log 2>&1 &
 PID=$!
 
 # 保存PID到文件
 echo $PID > bin/agent-platform.pid
 echo "服务已启动，PID: $PID"
 echo "PID已保存到: bin/agent-platform.pid"
-echo "日志文件: storage/logs/service.log"
+echo "日志文件: storage/logs/service-$(date +%F).log"
 echo
 echo "使用以下命令管理服务:"
 echo "  停止服务: ./stop.sh"
