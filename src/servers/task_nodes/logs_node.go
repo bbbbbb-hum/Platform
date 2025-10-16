@@ -18,10 +18,14 @@ func (l *LogsNode) Init(config types.InitConfig) error {
 	logger.Info("初始化日志节点", zap.String("node_id", fmt.Sprint(config.NodeModel.Id)))
 	// 初始化日志文件等
 	l.NodeInfo = &types.NodeInfo{
-		NodeID:      config.NodeModel.Id,
-		NodeHandle:  config.NodeModel.NodeHandle,
-		NodeName:    config.NodeModel.NodeName,
-		Description: config.NodeModel.Description,
+		ServiceID:               config.ServiceID,
+		ChainID:                 config.ChainModel.Id,
+		NodeID:                  config.NodeModel.Id,
+		NodeHandle:              config.NodeModel.NodeHandle,
+		NodeName:                config.NodeModel.NodeName,
+		Description:             config.NodeModel.Description,
+		Enabled:                 true,
+		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	//无工具注册
 	return nil

@@ -1,0 +1,8 @@
+services:
+  agentearthagentplatform:
+    image: agentearthagentplatform
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    ports:
+      - 9003:9003

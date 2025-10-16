@@ -1,8 +1,10 @@
 package models
 
 import (
-	"github.com/lib/pq"
 	"time"
+
+	"github.com/lib/pq"
+	"gorm.io/gorm"
 )
 
 const TableNameAeMcpServices = "ae_mcp_services"
@@ -21,6 +23,7 @@ type AeMcpServices struct {
 	CreateTime      time.Time      `gorm:"column:create_time" json:"create_time"`                                // 创建时间
 	UpdateTime      time.Time      `gorm:"column:update_time" json:"update_time"`                                // 更新时间
 	XNetServiceId   string         `gorm:"column:x_net_service_id" json:"x_net_service_id"`                      // xnetserviceid
+	CallNum         int32          `gorm:"column:call_num" json:"call_num"`                                      // 调用次数
 }
 
 func (m *AeMcpServices) TableName() string {
@@ -29,5 +32,10 @@ func (m *AeMcpServices) TableName() string {
 
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	err = GetDB().Find(&list).Error
+	return
+}
+
+func (m *AeMcpServices) UpdateCallNum(serverId string) (err error) {
+	err = GetDB().Model(&AeMcpServices{}).Where("server_id = ?", serverId).Update("call_num", gorm.Expr("call_num + 1")).Error
 	return
 }

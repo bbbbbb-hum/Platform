@@ -23,6 +23,8 @@ type (
 
 func (i *ChainInstance) Init(config types.InitConfig) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(config.ChainModel.Id)))
+	i.ServerID = config.ServiceID
+	i.ChainID = config.ChainModel.Id
 	// 获取链上所有节点数据
 	nodesModel := &models.AeMcpTaskNode{}
 	err, nodeModels := nodesModel.GetChianNodes(config.ChainModel.NodeIds)
@@ -35,7 +37,9 @@ func (i *ChainInstance) Init(config types.InitConfig) error {
 		if node, ok := task_nodes.CreateNodeByType(nodeModel.NodeHandle); ok {
 			// 调用节点的Init方法，初始化节点
 			err = node.Init(types.InitConfig{
-				NodeModel: nodeModel,
+				ServiceID:  config.ServiceID,
+				ChainModel: config.ChainModel,
+				NodeModel:  nodeModel,
 			})
 			if err != nil {
 				logger.Error("初始化节点失败", zap.Error(err), zap.String("node_handle", nodeModel.NodeHandle), zap.Int32("node_id", nodeModel.Id))
