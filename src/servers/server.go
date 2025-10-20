@@ -103,13 +103,11 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	//
 	var toolModelList = []*models.AeMcpTools{}
 	for _, tool := range server.toolDescList {
-		// 使用新的工具调用处理器
-		mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
-			Name:        tool.ToolName,
-			Description: tool.ToolDesc,
-			Title:       fmt.Sprintf("%s Tool", tool.ToolName),
-			InputSchema: tool.ToolInputSchema,
-		}, server.OnCallTool)
+		// 注册工具，捕获并跳过可能的 panic
+		if !safeAddTool(server, tool) {
+			logger.Warn("注册工具失败，已跳过", zap.String("tool_name", tool.ToolName))
+			continue
+		}
 		var schemaMap map[string]interface{}
 		if tool.ToolInputSchema != nil {
 			b, err1 := json.Marshal(tool.ToolInputSchema)
@@ -122,7 +120,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 				return nil
 			}
 		}
-		//新增工具
+		// 新增工具
 		toolModel := models.AeMcpTools{
 			Id:          0,
 			ServiceId:   service.Id,
@@ -166,6 +164,26 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(server.toolDescList)))
 
 	return server
+}
+
+// safeAddTool wraps mcp.AddTool with panic recovery. It returns false if a panic occurred.
+func safeAddTool(server *Server, tool *types.ToolDesc) (ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("AddTool 发生 panic，已跳过该工具",
+				zap.String("tool_name", tool.ToolName),
+				zap.Any("tool_input_schema", tool.ToolInputSchema),
+				zap.Any("recover", r))
+			ok = false
+		}
+	}()
+	mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
+		Name:        tool.ToolName,
+		Description: tool.ToolDesc,
+		Title:       fmt.Sprintf("%s Tool", tool.ToolName),
+		InputSchema: tool.ToolInputSchema,
+	}, server.OnCallTool)
+	return true
 }
 
 // OnCallTool 新的工具调用处理器
