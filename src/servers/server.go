@@ -43,10 +43,10 @@ func Initialize() error {
 	// 遍历服务列表，为每个启用的服务创建实例
 	enabledCount := 0
 	for _, service := range serviceList {
-		if !service.Enabled {
-			logger.Info("跳过未启用的服务", zap.String("server_name", service.ServerName), zap.String("server_id", service.ServerId))
-			continue
-		}
+		//if !service.Enabled {
+		//	logger.Info("跳过未启用的服务", zap.String("server_name", service.ServerName), zap.String("server_id", service.ServerId))
+		//	continue
+		//}
 
 		// 创建MCP服务实例
 		server := createMcpServer(service)
@@ -143,10 +143,23 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 			if err = tx.Create(toolModelList).Error; err != nil {
 				return err
 			}
+			// 上线服务
+			err = service.UpdateEnabled(true)
+			if err != nil {
+				logger.Error("上线服务失败", zap.Error(err))
+				return nil
+			}
 			return nil
 		})
 		if err != nil {
 			logger.Error("更新工具列表失败~", zap.Error(err))
+		}
+	} else {
+		//下线无工具服务
+		err = service.UpdateEnabled(false)
+		if err != nil {
+			logger.Error("下线服务失败", zap.Error(err))
+			return nil
 		}
 	}
 

@@ -39,3 +39,8 @@ func (m *AeMcpServices) UpdateCallNum(serverId string) (err error) {
 	err = GetDB().Model(&AeMcpServices{}).Where("server_id = ?", serverId).Update("call_num", gorm.Expr("call_num + 1")).Error
 	return
 }
+
+func (m *AeMcpServices) UpdateEnabled(enabled bool) (err error) {
+	err = GetDB().Model(&AeMcpServices{}).Where("id = ?", m.Id).Update("enabled", enabled).Error
+	return
+}
