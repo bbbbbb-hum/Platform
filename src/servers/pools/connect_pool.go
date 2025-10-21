@@ -464,11 +464,27 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 		Name:    "AgentEarth-Proxy-Stdio",
 		Version: "v1.0.0",
 	}, nil)
-	logger.Debug("连接前...", zap.Any("command", cmd))
-	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
-	logger.Debug("连接后...", zap.Any("session", session))
+
+	// 创建带超时的context，100秒后自动取消
+	connectCtx, cancel := context.WithTimeout(ctx, time.Duration(launchInfo.LaunchTimeout)*time.Millisecond)
+	defer cancel()
+
+	logger.Debug("连接前...", zap.Any("command", cmd), zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond))
+	startTime := time.Now()
+	session, err1 := client.Connect(connectCtx, &mcp.CommandTransport{Command: cmd}, nil)
+	duration := time.Since(startTime)
+	logger.Debug("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
+
 	if err1 != nil {
-		logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
+		if connectCtx.Err() == context.DeadlineExceeded {
+			logger.Error("连接超时，已中断cmd命令执行",
+				zap.Error(err1),
+				zap.Int32("aid", aid),
+				zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond),
+				zap.Duration("elapsed", duration))
+		} else {
+			logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
+		}
 		err = err1
 		return
 	}
