@@ -126,10 +126,10 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 	}
 
 	// 加载账号配置
-	service, err = c.loadAccountConfigs(service)
-	if err != nil {
-		return err
-	}
+	//service, err = c.loadAccountConfigs(service)
+	//if err != nil {
+	//	return err
+	//}
 
 	// 创建实例信息
 	switch service.Type {
@@ -501,61 +501,61 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 // 按httpStreamable创建实例
 func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, service *ExternalService) (newService *ExternalService, err error) {
 	newService = service
-	if service.ConnectInfo.Headers != nil {
-		//需要鉴权
-		// 准备认证头
-		for i, account := range service.Accounts {
-			if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
-				// 创建连接配置副本，避免修改原始配置
-				connectInfoCopy := *service.ConnectInfo
-				connectInfoCopy.Headers = make(map[string]string)
-
-				// 合并原始headers和认证信息
-				for k, v := range service.ConnectInfo.Headers {
-					connectInfoCopy.Headers[k] = v
-				}
-				for k, v := range account.AuthInfo {
-					connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
-				}
-
-				//按当前账号信息创建实例
-				instance := &ServiceInstance{
-					AccountId:           account.AccountID,
-					InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
-					Connections:         make([]*ExternalConnection, 0),
-					ResolvedConnectInfo: &connectInfoCopy,
-					TargetConnections:   1,
-				}
-				//创建连接
-				connection, err1 := c.createHttpStreamableConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
-				if err1 != nil {
-					logger.Error("创建http实例连接失败", zap.Error(err1))
-					continue
-				}
-				instance.Connections = append(instance.Connections, connection)
-				newService.InstanceMap[instance.InstanceId] = instance
-			}
+	//if service.ConnectInfo.Headers != nil {
+	//	//需要鉴权
+	//	// 准备认证头
+	//	for i, account := range service.Accounts {
+	//		if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
+	//			// 创建连接配置副本，避免修改原始配置
+	//			connectInfoCopy := *service.ConnectInfo
+	//			connectInfoCopy.Headers = make(map[string]string)
+	//
+	//			// 合并原始headers和认证信息
+	//			for k, v := range service.ConnectInfo.Headers {
+	//				connectInfoCopy.Headers[k] = v
+	//			}
+	//			for k, v := range account.AuthInfo {
+	//				connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
+	//			}
+	//
+	//			//按当前账号信息创建实例
+	//			instance := &ServiceInstance{
+	//				AccountId:           account.AccountID,
+	//				InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
+	//				Connections:         make([]*ExternalConnection, 0),
+	//				ResolvedConnectInfo: &connectInfoCopy,
+	//				TargetConnections:   1,
+	//			}
+	//			//创建连接
+	//			connection, err1 := c.createHttpStreamableConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
+	//			if err1 != nil {
+	//				logger.Error("创建http实例连接失败", zap.Error(err1))
+	//				continue
+	//			}
+	//			instance.Connections = append(instance.Connections, connection)
+	//			newService.InstanceMap[instance.InstanceId] = instance
+	//		}
+	//	}
+	//} else {
+	//无需鉴权
+	for i := 0; i < int(service.MaxInstance); i++ {
+		instance := &ServiceInstance{
+			AccountId:           int32(i),
+			InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
+			Connections:         make([]*ExternalConnection, 0),
+			ResolvedConnectInfo: service.ConnectInfo,
+			TargetConnections:   1,
 		}
-	} else {
-		//无需鉴权
-		for i := 0; i < int(service.MaxInstance); i++ {
-			instance := &ServiceInstance{
-				AccountId:           int32(i),
-				InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
-				Connections:         make([]*ExternalConnection, 0),
-				ResolvedConnectInfo: service.ConnectInfo,
-				TargetConnections:   1,
-			}
-			//创建连接
-			connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
-			if err1 != nil {
-				logger.Error("创建http实例连接失败", zap.Error(err1))
-				continue
-			}
-			instance.Connections = append(instance.Connections, connection)
-			newService.InstanceMap[instance.InstanceId] = instance
+		//创建连接
+		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
+		if err1 != nil {
+			logger.Error("创建http实例连接失败", zap.Error(err1))
+			continue
 		}
+		instance.Connections = append(instance.Connections, connection)
+		newService.InstanceMap[instance.InstanceId] = instance
 	}
+	//}
 	return
 }
 

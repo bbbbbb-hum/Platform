@@ -31,7 +31,9 @@ func (m *AeMcpServices) TableName() string {
 }
 
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
-	err = GetDB().Find(&list).Error
+	db := GetDB()
+	db = db.Where("enabled = ?", false)
+	err = db.Find(&list).Error
 	return
 }
 
