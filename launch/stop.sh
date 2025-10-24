@@ -2,12 +2,17 @@
 
 # AgentEarth AgentPlatform 停止服务脚本
 
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 加载配置
+source "$SCRIPT_DIR/config.sh"
+
 echo "========================================"
 echo "   AgentEarth AgentPlatform 停止服务"
 echo "========================================"
 
 # 检查PID文件是否存在
-PID_FILE="bin/agent-platform.pid"
 if [ ! -f "$PID_FILE" ]; then
     echo "PID文件不存在: $PID_FILE"
     echo "服务可能未启动或PID文件丢失"
