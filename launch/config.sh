@@ -19,7 +19,7 @@ BIN_DIR="/opt/xlapps/AgentEarth-AgentPlatform/bin"
 EXEC_FILE="$BIN_DIR/$SERVICE_NAME"
 
 # 日志目录和文件
-LOG_DIR="/opt/xlapps/AgentEarth-AgentPlatform/"
+LOG_DIR="/opt/xllogs/AgentEarth-AgentPlatform/"
 DATE=$(date +%Y-%m-%d)
 LOG_FILE="$LOG_DIR/service-${DATE}.log"
 
