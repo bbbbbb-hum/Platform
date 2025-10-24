@@ -5,22 +5,21 @@
 ENV=${1:-test}
 
 # 服务名称
-SERVICE_NAME="agent-platform"
+SERVICE_NAME="agent-platform-api"
 
 # 项目根目录（脚本所在目录的上一级）
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="/tmp/xltmp/AgentEarth-AgentPlatform/"
 
 # 源码目录
 SOURCE_DIR="$PROJECT_ROOT/src"
 MAIN_FILE="$SOURCE_DIR/main.go"
 
 # 可执行文件目录和文件路径
-BIN_DIR="$PROJECT_ROOT/bin"
+BIN_DIR="/opt/xlapps/AgentEarth/bin"
 EXEC_FILE="$BIN_DIR/$SERVICE_NAME"
 
 # 日志目录和文件
-LOG_DIR="$PROJECT_ROOT/storage/logs"
+LOG_DIR="/opt/xlapps/AgentEarth-AgentPlatform/"
 DATE=$(date +%Y-%m-%d)
 LOG_FILE="$LOG_DIR/service-${DATE}.log"
 
