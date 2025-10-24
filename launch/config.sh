@@ -15,7 +15,7 @@ SOURCE_DIR="$PROJECT_ROOT/src"
 MAIN_FILE="$SOURCE_DIR/main.go"
 
 # 可执行文件目录和文件路径
-BIN_DIR="/opt/xlapps/AgentEarth/bin"
+BIN_DIR="/opt/xlapps/AgentEarth-AgentPlatform/bin"
 EXEC_FILE="$BIN_DIR/$SERVICE_NAME"
 
 # 日志目录和文件
