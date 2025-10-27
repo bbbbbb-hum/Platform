@@ -46,7 +46,7 @@ echo "========================================"
 echo
 
 # 后台启动服务并保存PID
-nohup "$EXEC_FILE" --env=$ENV >> "$LOG_FILE" 2>&1 &
+nohup "$EXEC_FILE" --env=$ENV >/dev/null 2>&1 &
 PID=$!
 
 # 等待一下确保进程启动
