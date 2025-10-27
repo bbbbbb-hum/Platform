@@ -6,6 +6,7 @@ func init() {
 	config.Add("log", func() map[string]interface{} {
 		return map[string]interface{}{
 			"level":      config.Env("LOG_LEVEL", "debug"),
+			"log_type":   config.Env("LOG_TYPE", "single"),
 			"filename":   config.Env("LOG_NAME", "storage/logs/logs.log"), // 日志文件路径
 			"max_size":   config.Env("LOG_MAX_SIZE", 64),                  // 每个日志文件保存的最大尺寸 单位：M
 			"max_backup": config.Env("LOG_MAX_BACKUP", 5),                 // 最多保存日志文件数，0 为不限，MaxAge 到了还是会删
