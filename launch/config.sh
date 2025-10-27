@@ -8,7 +8,7 @@ ENV=${1:-test}
 SERVICE_NAME="agent-platform-api"
 
 # 项目根目录（脚本所在目录的上一级）
-PROJECT_ROOT="/tmp/xltmp/AgentEarth-AgentPlatform/"
+PROJECT_ROOT="/tmp/xltmp/AgentEarth-AgentPlatform"
 
 # 源码目录
 SOURCE_DIR="$PROJECT_ROOT/src"
@@ -19,7 +19,7 @@ BIN_DIR="/opt/xlapps/AgentEarth-AgentPlatform/bin"
 EXEC_FILE="$BIN_DIR/$SERVICE_NAME"
 
 # 日志目录和文件
-LOG_DIR="/opt/xllogs/AgentEarth-AgentPlatform/"
+LOG_DIR="/opt/xllogs/AgentEarth-AgentPlatform"
 DATE=$(date +%Y-%m-%d)
 LOG_FILE="$LOG_DIR/service-${DATE}.log"
 
