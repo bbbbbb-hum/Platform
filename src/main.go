@@ -10,6 +10,7 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"flag"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -75,6 +76,13 @@ func main() {
 
 	// Prometheus metrics 端点（不需要认证）
 	mux.Handle("/metrics", promhttp.Handler())
+
+	// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	// 修改路由格式：/mcp-server/{server_id}/sse
 	// 使用 Prometheus 中间件包装
