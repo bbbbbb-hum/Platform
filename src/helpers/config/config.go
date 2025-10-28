@@ -61,7 +61,12 @@ func loadEnv(envSuffix string) {
 	}
 
 	// 加载 env
-	viper.SetConfigName(envPath)
+	// 如果是绝对路径，使用 SetConfigFile；否则使用 SetConfigName
+	if len(envPath) > 0 && envPath[0] == '/' {
+		viper.SetConfigFile(envPath)
+	} else {
+		viper.SetConfigName(envPath)
+	}
 	if err := viper.ReadInConfig(); err != nil {
 		panic(err)
 	}
