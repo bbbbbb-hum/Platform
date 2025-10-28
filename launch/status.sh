@@ -11,71 +11,163 @@ source "$SCRIPT_DIR/config.sh"
 echo "========================================"
 echo "   AgentEarth AgentPlatform 服务状态"
 echo "========================================"
+echo "使用环境: $ENV"
+echo
 
-# 检查PID文件
-if [ ! -f "$PID_FILE" ]; then
-    echo "✗ 服务未运行 (PID文件不存在)"
+# 1. 使用命令查找进程
+echo "正在检查服务进程..."
+RUNNING_PIDS=$(pgrep -f "$SERVICE_NAME" 2>/dev/null)
+
+if [ -z "$RUNNING_PIDS" ]; then
+    echo "✗ 服务未运行 (未找到进程)"
+    
+    # 检查 PID 文件是否存在但进程不在
+    if [ -f "$PID_FILE" ]; then
+        echo "  ⚠ PID 文件存在但进程不在运行，正在清理..."
+        rm -f "$PID_FILE"
+    fi
+    
     echo "  使用 $SCRIPT_DIR/start.sh 启动服务"
     echo "========================================"
     exit 0
 fi
 
-# 读取PID
-PID=$(cat "$PID_FILE")
-if [ -z "$PID" ]; then
-    echo "✗ 服务未运行 (PID文件为空)"
-    echo "  使用 $SCRIPT_DIR/start.sh 启动服务"
-    echo "========================================"
-    exit 0
+# 可能有多个进程
+PID_COUNT=$(echo "$RUNNING_PIDS" | wc -w)
+if [ "$PID_COUNT" -gt 1 ]; then
+    echo "⚠ 警告: 发现 $PID_COUNT 个服务进程"
+    echo "  进程 PIDs: $RUNNING_PIDS"
+else
+    echo "✓ 服务正在运行"
+    echo "  进程 PID: $RUNNING_PIDS"
 fi
 
-echo "从PID文件读取到进程ID: $PID"
-
-# 检查进程是否存在
-if ! kill -0 "$PID" 2>/dev/null; then
-    echo "✗ 服务未运行 (进程 $PID 不存在)"
-    echo "  清理PID文件..."
-    rm -f "$PID_FILE"
-    echo "  使用 $SCRIPT_DIR/start.sh 启动服务"
-    echo "========================================"
-    exit 0
+# 检查 PID 文件是否与实际进程匹配
+if [ -f "$PID_FILE" ]; then
+    FILE_PID=$(cat "$PID_FILE")
+    if echo "$RUNNING_PIDS" | grep -q "^${FILE_PID}$"; then
+        echo "  ✓ PID 文件与实际进程匹配"
+    else
+        echo "  ⚠ PID 文件 ($FILE_PID) 与实际进程 ($RUNNING_PIDS) 不匹配"
+    fi
 fi
-
-echo "✓ 服务正在运行"
-echo "  进程 PID: $PID"
-
-# 显示进程详细信息
-echo "  进程信息:"
-ps -p $PID -o pid,ppid,cmd,etime,pcpu,pmem 2>/dev/null || echo "  无法获取进程详细信息"
 
 echo
 
-# 检查日志文件
-if [ -f "$LOG_FILE" ]; then
-    echo "✓ 服务日志文件存在"
-    echo "  日志文件: $LOG_FILE"
-    echo "  文件大小: $(du -h "$LOG_FILE" | cut -f1)"
-    echo "  最后修改时间: $(stat -c %y "$LOG_FILE" 2>/dev/null || stat -f %Sm "$LOG_FILE" 2>/dev/null)"
-    
-    # 显示最近的日志
-    echo "  最近日志 (最后10行):"
-    echo "  ----------------------------------------"
-    tail -10 "$LOG_FILE" | sed 's/^/  /'
-    echo "  ----------------------------------------"
+# 2. 显示进程详细信息
+echo "进程详细信息:"
+echo "----------------------------------------"
+for PID in $RUNNING_PIDS; do
+    if ps -p $PID > /dev/null 2>&1; then
+        echo "PID: $PID"
+        ps -p $PID -o pid,ppid,user,%cpu,%mem,etime,cmd --no-headers 2>/dev/null | sed 's/^/  /' || \
+        ps -p $PID -o pid,ppid,user,pcpu,pmem,etime,command 2>/dev/null | sed 's/^/  /'
+        echo
+    fi
+done
+echo "----------------------------------------"
+echo
+
+# 3. 检查配置文件和端口
+DEFAULT_PORT="9001"
+if [ -n "$ENV" ]; then
+    CONFIG_FILE_CHECK="/opt/xlconfigs/AgentEarth-AgentPlatform/.env.$ENV"
 else
-    echo "✗ 服务日志文件不存在: $LOG_FILE"
+    CONFIG_FILE_CHECK="config/.env"
 fi
 
-# 检查端口占用（如果知道端口号）
-# 取消注释下面的代码，并替换为实际的端口号
-# PORT=8080
-# echo
-# echo "检查端口 $PORT 状态..."
-# if lsof -ti:$PORT > /dev/null; then
-#     echo "✓ 端口 $PORT 正在监听"
-# else
-#     echo "✗ 端口 $PORT 未在监听"
-# fi
+echo "配置信息:"
+echo "----------------------------------------"
+if [ -f "$CONFIG_FILE_CHECK" ]; then
+    echo "✓ 配置文件: $CONFIG_FILE_CHECK"
+    
+    # 读取端口配置
+    PORT=$(grep "^SERVER_PORT=" "$CONFIG_FILE_CHECK" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'')
+    [ -z "$PORT" ] && PORT="$DEFAULT_PORT"
+    
+    # 读取主机配置
+    HOST=$(grep "^SERVER_HOST=" "$CONFIG_FILE_CHECK" 2>/dev/null | cut -d'=' -f2 | tr -d ' "'"'"'')
+    [ -z "$HOST" ] && HOST="0.0.0.0"
+    
+    echo "  监听地址: $HOST:$PORT"
+else
+    echo "⚠ 配置文件不存在: $CONFIG_FILE_CHECK"
+    echo "  使用默认端口: $DEFAULT_PORT"
+    PORT="$DEFAULT_PORT"
+    HOST="0.0.0.0"
+fi
+echo "----------------------------------------"
+echo
+
+# 4. 检查端口监听状态
+echo "端口监听状态:"
+echo "----------------------------------------"
+PORT_LISTENING=false
+
+# 尝试使用不同的工具检查端口
+if command -v ss &> /dev/null; then
+    PORT_INFO=$(ss -tlnp 2>/dev/null | grep ":$PORT ")
+    if [ -n "$PORT_INFO" ]; then
+        echo "✓ 端口 $PORT 正在监听"
+        echo "$PORT_INFO" | sed 's/^/  /'
+        PORT_LISTENING=true
+    fi
+elif command -v netstat &> /dev/null; then
+    PORT_INFO=$(netstat -tlnp 2>/dev/null | grep ":$PORT ")
+    if [ -n "$PORT_INFO" ]; then
+        echo "✓ 端口 $PORT 正在监听"
+        echo "$PORT_INFO" | sed 's/^/  /'
+        PORT_LISTENING=true
+    fi
+elif command -v lsof &> /dev/null; then
+    PORT_INFO=$(lsof -i ":$PORT" 2>/dev/null | grep LISTEN)
+    if [ -n "$PORT_INFO" ]; then
+        echo "✓ 端口 $PORT 正在监听"
+        echo "$PORT_INFO" | sed 's/^/  /'
+        PORT_LISTENING=true
+    fi
+fi
+
+if [ "$PORT_LISTENING" = false ]; then
+    echo "✗ 端口 $PORT 未在监听"
+    echo "  服务可能未正常启动或配置有误"
+fi
+echo "----------------------------------------"
+echo
+
+# 5. 检查日志目录和文件
+echo "日志信息:"
+echo "----------------------------------------"
+echo "  日志目录: $LOG_DIR"
+
+# 列出日志目录中的所有日志文件
+if [ -d "$LOG_DIR" ]; then
+    LOG_FILES=$(ls -t "$LOG_DIR"/*.log 2>/dev/null)
+    if [ -n "$LOG_FILES" ]; then
+        echo "✓ 日志文件列表 (按修改时间倒序):"
+        for log_file in $LOG_FILES; do
+            SIZE=$(du -h "$log_file" | cut -f1)
+            MTIME=$(stat -c %y "$log_file" 2>/dev/null | cut -d'.' -f1 || stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$log_file" 2>/dev/null)
+            echo "    $(basename "$log_file") - $SIZE - $MTIME"
+        done
+        
+        # 显示最新日志文件的最后几行
+        LATEST_LOG=$(echo "$LOG_FILES" | head -1)
+        if [ -f "$LATEST_LOG" ]; then
+            echo
+            echo "  最新日志文件: $(basename "$LATEST_LOG")"
+            echo "  最近日志 (最后 5 行):"
+            echo "  ........................................"
+            tail -5 "$LATEST_LOG" | sed 's/^/  /'
+            echo "  ........................................"
+        fi
+    else
+        echo "⚠ 日志目录中没有日志文件"
+    fi
+else
+    echo "✗ 日志目录不存在: $LOG_DIR"
+fi
+echo "----------------------------------------"
 
 echo
 echo "========================================"
