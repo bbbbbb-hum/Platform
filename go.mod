@@ -5,6 +5,7 @@ go 1.24.5
 require (
 	github.com/lib/pq v1.10.9
 	github.com/modelcontextprotocol/go-sdk v0.4.0
+	github.com/prometheus/client_golang v1.20.5
 	go.uber.org/zap v1.21.0
 	gorm.io/datatypes v1.2.6
 	gorm.io/driver/mysql v1.6.0

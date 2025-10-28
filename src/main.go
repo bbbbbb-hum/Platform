@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,6 +44,10 @@ func main() {
 		return
 	}
 
+	// 初始化 Prometheus Metrics
+	middleware.InitMetrics()
+	logger.Info("Prometheus metrics 初始化完成")
+
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
@@ -67,8 +72,13 @@ func main() {
 	authMiddleware := middleware.NewAuth()
 	// 设置路由
 	mux := http.NewServeMux()
+
+	// Prometheus metrics 端点（不需要认证）
+	mux.Handle("/metrics", promhttp.Handler())
+
 	// 修改路由格式：/mcp-server/{server_id}/sse
-	mux.Handle("/mcp-server/", authMiddleware.Auth(sseHandler.ServeHTTP))
+	// 使用 Prometheus 中间件包装
+	mux.Handle("/mcp-server/", middleware.PrometheusMiddleware(authMiddleware.Auth(sseHandler.ServeHTTP)))
 
 	// 启动 HTTP 服务
 	host := helperConfig.GetString("server.host")

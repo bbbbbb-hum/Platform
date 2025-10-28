@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# Prometheus Docker 安装脚本 - 测试环境
+
+echo "========================================"
+echo "   Prometheus Docker 安装脚本"
+echo "========================================"
+echo
+
+# 检查 Docker 是否安装
+if ! command -v docker &> /dev/null; then
+    echo "错误: Docker 未安装"
+    echo "请先安装 Docker: https://docs.docker.com/engine/install/"
+    exit 1
+fi
+
+echo "✓ Docker 已安装"
+docker --version
+echo
+
+# 配置路径
+PROM_CONFIG_DIR="/opt/xlconfigs/prometheus"
+PROM_DATA_DIR="/opt/xldatas/prometheus"
+
+# 创建目录
+echo "创建 Prometheus 目录..."
+sudo mkdir -p "$PROM_CONFIG_DIR"
+sudo mkdir -p "$PROM_DATA_DIR"
+
+# 检查配置文件
+if [ ! -f "$PROM_CONFIG_DIR/prometheus.yml" ]; then
+    echo "错误: 配置文件不存在: $PROM_CONFIG_DIR/prometheus.yml"
+    echo "请先创建配置文件"
+    exit 1
+fi
+
+echo "✓ 配置文件存在: $PROM_CONFIG_DIR/prometheus.yml"
+echo
+
+# 检查是否已有运行的容器
+if docker ps -a | grep -q "prometheus-test"; then
+    echo "发现已存在的 Prometheus 容器"
+    read -p "是否删除并重新创建? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "停止并删除旧容器..."
+        docker stop prometheus-test 2>/dev/null
+        docker rm prometheus-test 2>/dev/null
+        echo "✓ 旧容器已删除"
+    else
+        echo "取消安装"
+        exit 0
+    fi
+fi
+
+# 设置目录权限（Prometheus 容器使用 nobody 用户，UID=65534）
+echo "设置目录权限..."
+sudo chown -R 65534:65534 "$PROM_DATA_DIR"
+sudo chmod -R 755 "$PROM_CONFIG_DIR"
+
+# 启动 Prometheus 容器
+echo
+echo "启动 Prometheus 容器..."
+echo "========================================"
+
+docker run -d \
+  --name prometheus-test \
+  --restart unless-stopped \
+  -p 9090:9090 \
+  -v "$PROM_CONFIG_DIR/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+  -v "$PROM_DATA_DIR:/prometheus" \
+  -u 65534:65534 \
+  prom/prometheus:latest \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/prometheus \
+  --storage.tsdb.retention.time=30d \
+  --web.console.libraries=/usr/share/prometheus/console_libraries \
+  --web.console.templates=/usr/share/prometheus/consoles \
+  --web.enable-lifecycle
+
+if [ $? -eq 0 ]; then
+    echo
+    echo "========================================"
+    echo "✓ Prometheus 安装成功！"
+    echo "========================================"
+    echo
+    echo "访问地址:"
+    echo "  Prometheus UI: http://$(hostname -I | awk '{print $1}'):9090"
+    echo "  或: http://localhost:9090"
+    echo
+    echo "配置文件: $PROM_CONFIG_DIR/prometheus.yml"
+    echo "数据目录: $PROM_DATA_DIR"
+    echo
+    echo "管理命令:"
+    echo "  查看日志: docker logs -f prometheus-test"
+    echo "  停止服务: docker stop prometheus-test"
+    echo "  启动服务: docker start prometheus-test"
+    echo "  重启服务: docker restart prometheus-test"
+    echo "  删除容器: docker stop prometheus-test && docker rm prometheus-test"
+    echo
+    echo "热重载配置:"
+    echo "  curl -X POST http://localhost:9090/-/reload"
+    echo
+    echo "等待 3 秒后检查容器状态..."
+    sleep 3
+    docker ps | grep prometheus-test
+else
+    echo
+    echo "✗ Prometheus 启动失败"
+    echo "请查看错误信息"
+    exit 1
+fi
+
+echo
+echo "========================================"
+
