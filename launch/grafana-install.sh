@@ -80,7 +80,6 @@ docker run -d \
   -p ${GRAFANA_PORT}:3000 \
   -v "$GRAFANA_DATA_DIR:/var/lib/grafana" \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
-  -e "GF_INSTALL_PLUGINS=grafana-piechart-panel" \
   grafana/grafana:latest
 
 if [ $? -eq 0 ]; then
