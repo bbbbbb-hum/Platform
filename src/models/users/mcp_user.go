@@ -2,7 +2,7 @@ package users
 
 import "time"
 
-const TableNameMcpUser = "mcp_user"
+const TableNameMcpUser = "ae_user"
 
 // 用户表
 type McpUser struct {
