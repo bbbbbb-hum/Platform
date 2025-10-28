@@ -23,8 +23,8 @@ docker --version
 echo
 
 # 配置路径和容器名称（根据环境）
-PROM_CONFIG_DIR="/opt/xlconfigs/prometheus"
-PROM_DATA_DIR="/opt/xldatas/prometheus"
+PROM_CONFIG_DIR="/opt/xlconfigs/Prometheus"
+PROM_DATA_DIR="/opt/xldatas/Prometheus"
 CONTAINER_NAME="prometheus-${ENV}"
 
 echo "容器名称: $CONTAINER_NAME"

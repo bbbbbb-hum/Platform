@@ -99,7 +99,7 @@ else
     echo "排查步骤:"
     echo "  1. 检查 AgentPlatform 服务: $SCRIPT_DIR/status.sh"
     echo "  2. 测试 metrics 端点: curl http://localhost:9001/metrics"
-    echo "  3. 检查 Prometheus 配置: cat /opt/xlconfigs/prometheus/prometheus-${ENV}.yml"
+    echo "  3. 检查 Prometheus 配置: cat /opt/xlconfigs/Prometheus/prometheus-${ENV}.yml"
 fi
 
 echo
