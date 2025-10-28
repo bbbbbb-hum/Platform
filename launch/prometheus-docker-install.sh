@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Prometheus Docker 安装脚本 - 测试环境
+# Prometheus Docker 安装脚本
+
+# 解析环境参数，默认 test，可选值：test | prod
+ENV=${1:-test}
 
 echo "========================================"
 echo "   Prometheus Docker 安装脚本"
 echo "========================================"
+echo "使用环境: $ENV"
 echo
 
 # 检查 Docker 是否安装
@@ -18,9 +22,15 @@ echo "✓ Docker 已安装"
 docker --version
 echo
 
-# 配置路径
+# 配置路径和容器名称（根据环境）
 PROM_CONFIG_DIR="/opt/xlconfigs/prometheus"
 PROM_DATA_DIR="/opt/xldatas/prometheus"
+CONTAINER_NAME="prometheus-${ENV}"
+
+echo "容器名称: $CONTAINER_NAME"
+echo "配置目录: $PROM_CONFIG_DIR"
+echo "数据目录: $PROM_DATA_DIR"
+echo
 
 # 创建目录
 echo "创建 Prometheus 目录..."
@@ -28,24 +38,30 @@ sudo mkdir -p "$PROM_CONFIG_DIR"
 sudo mkdir -p "$PROM_DATA_DIR"
 
 # 检查配置文件
-if [ ! -f "$PROM_CONFIG_DIR/prometheus.yml" ]; then
-    echo "错误: 配置文件不存在: $PROM_CONFIG_DIR/prometheus.yml"
-    echo "请先创建配置文件"
-    exit 1
+CONFIG_FILE="$PROM_CONFIG_DIR/prometheus-${ENV}.yml"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "⚠ 配置文件不存在: $CONFIG_FILE"
+    echo "尝试使用默认配置文件: $PROM_CONFIG_DIR/prometheus.yml"
+    CONFIG_FILE="$PROM_CONFIG_DIR/prometheus.yml"
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "错误: 配置文件不存在"
+        echo "请先创建配置文件: $PROM_CONFIG_DIR/prometheus-${ENV}.yml"
+        exit 1
+    fi
 fi
 
-echo "✓ 配置文件存在: $PROM_CONFIG_DIR/prometheus.yml"
+echo "✓ 配置文件: $CONFIG_FILE"
 echo
 
 # 检查是否已有运行的容器
-if docker ps -a | grep -q "prometheus-test"; then
-    echo "发现已存在的 Prometheus 容器"
+if docker ps -a | grep -q "$CONTAINER_NAME"; then
+    echo "发现已存在的 Prometheus 容器: $CONTAINER_NAME"
     read -p "是否删除并重新创建? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "停止并删除旧容器..."
-        docker stop prometheus-test 2>/dev/null
-        docker rm prometheus-test 2>/dev/null
+        docker stop "$CONTAINER_NAME" 2>/dev/null
+        docker rm "$CONTAINER_NAME" 2>/dev/null
         echo "✓ 旧容器已删除"
     else
         echo "取消安装"
@@ -64,10 +80,10 @@ echo "启动 Prometheus 容器..."
 echo "========================================"
 
 docker run -d \
-  --name prometheus-test \
+  --name "$CONTAINER_NAME" \
   --restart unless-stopped \
   -p 9090:9090 \
-  -v "$PROM_CONFIG_DIR/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+  -v "$CONFIG_FILE:/etc/prometheus/prometheus.yml:ro" \
   -v "$PROM_DATA_DIR:/prometheus" \
   -u 65534:65534 \
   prom/prometheus:latest \
@@ -80,30 +96,41 @@ docker run -d \
 
 if [ $? -eq 0 ]; then
     echo
-    echo "========================================"
-    echo "✓ Prometheus 安装成功！"
-    echo "========================================"
-    echo
-    echo "访问地址:"
-    echo "  Prometheus UI: http://$(hostname -I | awk '{print $1}'):9090"
-    echo "  或: http://localhost:9090"
-    echo
-    echo "配置文件: $PROM_CONFIG_DIR/prometheus.yml"
-    echo "数据目录: $PROM_DATA_DIR"
-    echo
-    echo "管理命令:"
-    echo "  查看日志: docker logs -f prometheus-test"
-    echo "  停止服务: docker stop prometheus-test"
-    echo "  启动服务: docker start prometheus-test"
-    echo "  重启服务: docker restart prometheus-test"
-    echo "  删除容器: docker stop prometheus-test && docker rm prometheus-test"
-    echo
-    echo "热重载配置:"
-    echo "  curl -X POST http://localhost:9090/-/reload"
-    echo
     echo "等待 3 秒后检查容器状态..."
     sleep 3
-    docker ps | grep prometheus-test
+    
+    if docker ps | grep -q "$CONTAINER_NAME"; then
+        echo
+        echo "========================================"
+        echo "✓ Prometheus 安装成功！"
+        echo "========================================"
+        echo
+        echo "环境: $ENV"
+        echo "容器名称: $CONTAINER_NAME"
+        echo
+        echo "访问地址:"
+        echo "  Prometheus UI: http://$(hostname -I | awk '{print $1}'):9090"
+        echo "  或: http://localhost:9090"
+        echo
+        echo "配置文件: $CONFIG_FILE"
+        echo "数据目录: $PROM_DATA_DIR"
+        echo
+        echo "管理命令:"
+        echo "  查看日志: docker logs -f $CONTAINER_NAME"
+        echo "  停止服务: docker stop $CONTAINER_NAME"
+        echo "  启动服务: docker start $CONTAINER_NAME"
+        echo "  重启服务: docker restart $CONTAINER_NAME"
+        echo "  删除容器: docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME"
+        echo
+        echo "热重载配置:"
+        echo "  curl -X POST http://localhost:9090/-/reload"
+        echo
+        docker ps | grep "$CONTAINER_NAME"
+    else
+        echo "⚠ 容器启动异常，请查看日志"
+        docker logs "$CONTAINER_NAME"
+        exit 1
+    fi
 else
     echo
     echo "✗ Prometheus 启动失败"

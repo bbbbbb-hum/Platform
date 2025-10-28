@@ -2,27 +2,33 @@
 
 # Prometheus 状态检查脚本
 
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 解析环境参数，默认 test，可选值：test | prod
+ENV=${1:-test}
+
+CONTAINER_NAME="prometheus-${ENV}"
+
 echo "========================================"
 echo "   Prometheus 状态检查"
 echo "========================================"
+echo "使用环境: $ENV"
+echo "容器名称: $CONTAINER_NAME"
 echo
 
 # 检查 Prometheus 是否运行
 echo "1. 检查 Prometheus 服务..."
-if docker ps | grep -q "prometheus-test"; then
+if docker ps | grep -q "$CONTAINER_NAME"; then
     echo "✓ Prometheus Docker 容器正在运行"
-    docker ps | grep prometheus-test
+    docker ps | grep "$CONTAINER_NAME"
     PROM_TYPE="docker"
-elif sudo systemctl is-active --quiet prometheus 2>/dev/null; then
-    echo "✓ Prometheus systemd 服务正在运行"
-    sudo systemctl status prometheus --no-pager -l | head -n 10
-    PROM_TYPE="systemd"
 else
     echo "✗ Prometheus 未运行"
     echo
-    echo "启动方式:"
-    echo "  Docker: docker start prometheus-test"
-    echo "  Systemd: sudo systemctl start prometheus"
+    echo "容器: $CONTAINER_NAME"
+    echo "启动命令: docker start $CONTAINER_NAME"
+    echo "或重新安装: $SCRIPT_DIR/prometheus-docker-install.sh"
     exit 1
 fi
 
@@ -91,14 +97,17 @@ else
     echo "  3. Prometheus 配置中的 target 地址错误"
     echo
     echo "排查步骤:"
-    echo "  1. 检查 AgentPlatform 服务: /opt//status.sh"
+    echo "  1. 检查 AgentPlatform 服务: $SCRIPT_DIR/status.sh"
     echo "  2. 测试 metrics 端点: curl http://localhost:9001/metrics"
-    echo "  3. 检查 Prometheus 配置: cat /opt/xlconfig/prometheus/prometheus.yml"
+    echo "  3. 检查 Prometheus 配置: cat /opt/xlconfigs/prometheus/prometheus-${ENV}.yml"
 fi
 
 echo
 echo "7. 访问信息"
 echo "========================================"
+echo "环境: $ENV"
+echo "容器: $CONTAINER_NAME"
+echo
 echo "Prometheus UI: http://$(hostname -I | awk '{print $1}'):9090"
 echo "或: http://localhost:9090"
 echo
@@ -107,12 +116,11 @@ echo "  - Targets: http://localhost:9090/targets"
 echo "  - Graph: http://localhost:9090/graph"
 echo "  - Status: http://localhost:9090/status"
 echo
-if [ "$PROM_TYPE" = "docker" ]; then
-    echo "查看日志: docker logs -f prometheus-test"
-elif [ "$PROM_TYPE" = "systemd" ]; then
-    echo "查看日志: sudo journalctl -u prometheus -f"
-fi
-
+echo "管理命令:"
+echo "  查看日志: docker logs -f $CONTAINER_NAME"
+echo "  停止服务: docker stop $CONTAINER_NAME"
+echo "  启动服务: docker start $CONTAINER_NAME"
+echo "  重启服务: docker restart $CONTAINER_NAME"
 echo
 echo "========================================"
 
