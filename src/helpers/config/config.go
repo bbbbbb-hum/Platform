@@ -53,7 +53,7 @@ func loadEnv(envSuffix string) {
 	// 默认加载 .env 文件，如果有传参 --env=name 的话，加载 .env.name 文件
 	envPath := "config/.env"
 	if len(envSuffix) > 0 {
-		filepath := "/opt/xlconfig/AgentEarth-AgentPlatform/.env." + envSuffix
+		filepath := "/opt/xlconfigs/AgentEarth-AgentPlatform/.env." + envSuffix
 		if _, err := os.Stat(filepath); err == nil {
 			// 如 .env.testing 或 .env.stage
 			envPath = filepath
