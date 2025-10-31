@@ -24,6 +24,8 @@ type AeMcpServices struct {
 	UpdateTime      time.Time      `gorm:"column:update_time" json:"update_time"`                                // 更新时间
 	XNetServiceId   string         `gorm:"column:x_net_service_id" json:"x_net_service_id"`                      // xnetserviceid
 	CallNum         int32          `gorm:"column:call_num" json:"call_num"`                                      // 调用次数
+	CallSuccessNum  int32          `gorm:"column:call_success_num" json:"call_success_num"`                      // 成功次数
+	ResponseTime    float32        `gorm:"column:response_time" json:"response_time"`                            // 响应时间 ms 毫秒
 }
 
 func (m *AeMcpServices) TableName() string {
@@ -37,11 +39,23 @@ func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	return
 }
 
+// 更新调用次数
 func (m *AeMcpServices) UpdateCallNum(serverId string) (err error) {
 	err = GetDB().Model(&AeMcpServices{}).Where("server_id = ?", serverId).Update("call_num", gorm.Expr("call_num + 1")).Error
 	return
 }
 
+// 更新成功次数
+func (m *AeMcpServices) UpdateCallSuccess(serverId string) (err error) {
+	err = GetDB().Model(&AeMcpServices{}).Where("server_id = ?", serverId).Update("call_success_num", gorm.Expr("call_success_num + 1")).Error
+	return
+}
+
+// 更新响应时间
+func (m *AeMcpServices) UpdateResponseTime(serverId string, responseTime float32) (err error) {
+	err = GetDB().Model(&AeMcpServices{}).Where("server_id = ?", serverId).Update("response_time", responseTime).Error
+	return
+}
 func (m *AeMcpServices) UpdateEnabled(enabled bool) (err error) {
 	err = GetDB().Model(&AeMcpServices{}).Where("id = ?", m.Id).Update("enabled", enabled).Error
 	return

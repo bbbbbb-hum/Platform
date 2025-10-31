@@ -18,8 +18,11 @@ var NodeRegistry = map[string]func() types.Processor{
 	"proxy_handle": func() types.Processor {
 		return &ProxyNode{}
 	},
-	"statistic_handle": func() types.Processor {
-		return &StatisticNode{}
+	"statistic_pre_handle": func() types.Processor {
+		return &StatisticPreNode{}
+	},
+	"statistic_rear_handle": func() types.Processor {
+		return &StatisticRearNode{}
 	},
 }
 
