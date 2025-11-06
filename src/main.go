@@ -8,10 +8,14 @@ import (
 	"AgentEarth_AgentPlatform/src/middleware"
 	"AgentEarth_AgentPlatform/src/servers"
 	"AgentEarth_AgentPlatform/src/servers/pools"
+	"context"
 	"flag"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -89,14 +93,49 @@ func main() {
 	mcpHandler := middleware.PrometheusMiddleware(http.HandlerFunc(authMiddleware.Auth(sseHandler.ServeHTTP)))
 	mux.Handle("/mcp-server/", mcpHandler)
 
-	// 启动 HTTP 服务
+	// 创建 HTTP 服务器
 	host := helperConfig.GetString("server.host")
 	port := helperConfig.GetString("server.port")
 	addr := host + ":" + port
-	logger.Info("MCP服务启动...", zap.String("addr", addr))
-	err := http.ListenAndServe(addr, mux)
-	if err != nil {
-		logger.Error("启动MCP服务失败", zap.Error(err))
-		return
+	
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
 	}
+
+	// 启动信号监听，处理优雅关闭
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	// 在独立 goroutine 中启动 HTTP 服务
+	go func() {
+		logger.Info("MCP服务启动...", zap.String("addr", addr))
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("启动MCP服务失败", zap.Error(err))
+			os.Exit(1)
+		}
+	}()
+
+	// 等待终止信号
+	sig := <-sigChan
+	logger.Info("收到终止信号，开始优雅关闭...", zap.String("signal", sig.String()))
+
+	// 创建关闭超时上下文
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// 关闭所有 MCP 连接池（会清理所有 npx/uvx 子进程）
+	logger.Info("正在关闭连接池，清理子进程...")
+	pools.GetConnectPool().Close()
+	logger.Info("连接池关闭完成")
+
+	// 优雅关闭 HTTP 服务器
+	logger.Info("正在关闭HTTP服务器...")
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("HTTP服务器关闭失败", zap.Error(err))
+	} else {
+		logger.Info("HTTP服务器关闭完成")
+	}
+
+	logger.Info("服务已安全退出")
 }
