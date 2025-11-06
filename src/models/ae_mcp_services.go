@@ -26,6 +26,7 @@ type AeMcpServices struct {
 	CallNum         int32          `gorm:"column:call_num" json:"call_num"`                                      // 调用次数
 	CallSuccessNum  int32          `gorm:"column:call_success_num" json:"call_success_num"`                      // 成功次数
 	ResponseTime    float32        `gorm:"column:response_time" json:"response_time"`                            // 响应时间 ms 毫秒
+	IsCreated       bool           `gorm:"column:is_created;default:true" json:"is_created"`                     // 是否启动时创建服务
 }
 
 func (m *AeMcpServices) TableName() string {
@@ -34,7 +35,7 @@ func (m *AeMcpServices) TableName() string {
 
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
-	//db = db.Where("enabled = ?", false)
+	db = db.Where("is_created = ?", true)
 	err = db.Find(&list).Error
 	return
 }
