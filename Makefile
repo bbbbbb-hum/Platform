@@ -1,16 +1,16 @@
 # Makefile for MyApp Go Project
 
 # ========================
-# Variables - 修改这里
+# Variables
 # ========================
-BINARY_NAME := agent-platform-api                     # 可执行文件名称
-DIST_DIR := dist                         # 构建输出目录
+BINARY_NAME := agent-platform-api        		# 可执行文件名称
+DIST_DIR := dist                         		# 构建输出目录
 BINARY_DIR := $(DIST_DIR)/bin
 CONFIG_DIR := $(DIST_DIR)/config
 BINARY_PATH := $(BINARY_DIR)/$(BINARY_NAME)
 
-MAIN_PACKAGE := ./cmd/server             # main.go 所在路径
-TEST_PACKAGE := ./...                    # 要测试的包路径
+MAIN_PACKAGE := ./src             				# main.go 所在路径
+TEST_PACKAGE := ./...                    		# 要测试的包路径
 
 COVERAGE_FILE := coverage.out
 COVERAGE_HTML := coverage.html
