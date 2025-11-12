@@ -3,11 +3,32 @@
 # ========================
 # Variables
 # ========================
+ENV_CONFIG_FILE := /opt/xlconfigs/Env/env.conf
 BINARY_NAME := agent-platform-api
 DIST_DIR := dist
 BINARY_DIR := $(DIST_DIR)/bin
 CONFIG_DIR := $(DIST_DIR)/config
 BINARY_PATH := $(BINARY_DIR)/$(BINARY_NAME)
+
+# ========================
+# Load ENV from config (make-time)
+# ========================
+ifneq (,$(wildcard $(ENV_CONFIG_FILE)))
+ENV := $(strip $(shell . "$(ENV_CONFIG_FILE)"; echo $$ENV))
+MACHINE_NAME := $(strip $(shell . "$(ENV_CONFIG_FILE)"; echo $$MACHINE_NAME))
+export ENV
+export MACHINE_NAME
+else
+$(error 环境配置文件不存在: $(ENV_CONFIG_FILE))
+endif
+
+ifeq ($(ENV),)
+$(error 未能从配置文件中读取 ENV 变量: $(ENV_CONFIG_FILE))
+endif
+
+ifneq ($(filter $(ENV),test prod),$(ENV))
+$(error ENV 值不合法: $(ENV) 仅允许: test | prod)
+endif
 
 MAIN_PACKAGE := ./src
 TEST_PACKAGE := ./...
@@ -36,7 +57,14 @@ build:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
 	@go build $(GO_BUILD_FLAGS) -o $(BINARY_PATH) $(MAIN_PACKAGE)
+	@echo "Get Env"
+	@echo "✓ 从配置文件读取环境信息:"
+	@echo "  配置文件: $(ENV_CONFIG_FILE)"
+	@echo "  ENV: $(ENV)"
+	@if [ -n "$(MACHINE_NAME)" ]; then echo "  MACHINE_NAME: $(MACHINE_NAME)"; fi
+	@echo
 	@mkdir -p $(CONFIG_DIR)
+	@cp "./config/.env.$(ENV)" "$(CONFIG_DIR)/.env.$(ENV)"
 	@echo "Build completed: $(DIST_DIR)"
 
 # ========================
@@ -46,6 +74,14 @@ cross-build:
 	@echo "Cross-building $(BINARY_NAME) for $(GOOS)/$(GOARCH)..."
 	@mkdir -p $(BINARY_DIR)
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GO_BUILD_FLAGS) -o $(BINARY_PATH) $(MAIN_PACKAGE)
+	@echo "Get Env"
+	@echo "✓ 从配置文件读取环境信息:"
+	@echo "  配置文件: $(ENV_CONFIG_FILE)"
+	@echo "  ENV: $(ENV)"
+	@if [ -n "$(MACHINE_NAME)" ]; then echo "  MACHINE_NAME: $(MACHINE_NAME)"; fi
+	@echo
+	@mkdir -p $(CONFIG_DIR)
+	@cp "./config/.env.$(ENV)" "$(CONFIG_DIR)/.env.$(ENV)"
 	@echo "Build completed: $(BINARY_PATH)"
 
 # ========================
