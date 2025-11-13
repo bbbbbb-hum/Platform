@@ -71,10 +71,6 @@ func SetupDB() {
 		return
 	}
 
-	if err = sqlDB.Ping(); err != nil {
-		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
-	}
-
 	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 
 	// 检查 database.SQLDB 是否有效
@@ -91,6 +87,8 @@ func SetupDB() {
 	database.SQLDB.SetConnMaxLifetime(time.Duration(config.GetInt("database.max_life_seconds")) * time.Second)
 
 	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pools configured"))
-
+	if err = sqlDB.Ping(); err != nil {
+		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
+	}
 	// database.DB.AutoMigrate(&user.User{})
 }

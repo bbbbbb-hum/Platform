@@ -91,20 +91,21 @@ func main() {
 
 	// 初始化单个服务接口
 	mux.HandleFunc("/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 		pathId := r.URL.Path[len("/mcp-server/init/"):]
 		id, err := strconv.ParseInt(pathId, 10, 32)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
 			return
 		}
 		err = servers.InitializeByServiceId(int32(id))
 		if err != nil {
 			logger.Error("初始化MCP服务失败", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("MCP服务初始化完成"))
+		return
 	})
 
 	// 使用 Prometheus 中间件包装（先包装 SSE Handler，再添加认证，最后添加指标收集）
