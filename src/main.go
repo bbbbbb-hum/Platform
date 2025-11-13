@@ -14,6 +14,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -88,16 +89,33 @@ func main() {
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	// 修改路由格式：/mcp-server/{server_id}/sse
+	// 初始化单个服务接口
+	mux.HandleFunc("/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
+		pathId := r.URL.Path[len("/mcp-server/init/"):]
+		id, err := strconv.ParseInt(pathId, 10, 32)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		err = servers.InitializeByServiceId(int32(id))
+		if err != nil {
+			logger.Error("初始化MCP服务失败", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("MCP服务初始化完成"))
+	})
+
 	// 使用 Prometheus 中间件包装（先包装 SSE Handler，再添加认证，最后添加指标收集）
-	mcpHandler := middleware.PrometheusMiddleware(http.HandlerFunc(authMiddleware.Auth(sseHandler.ServeHTTP)))
+	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(sseHandler.ServeHTTP))
 	mux.Handle("/mcp-server/", mcpHandler)
 
 	// 创建 HTTP 服务器
 	host := helperConfig.GetString("server.host")
 	port := helperConfig.GetString("server.port")
 	addr := host + ":" + port
-	
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
