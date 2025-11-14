@@ -17,3 +17,6 @@
 .idea/
 storage/
 dist/
+
+# 过滤掉真实的配置文件
+#.env.*
