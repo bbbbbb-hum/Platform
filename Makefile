@@ -40,8 +40,6 @@ build:
 	@echo
 	@mkdir -p $(CONFIG_DIR)
 	@cp ./config/.env "$(CONFIG_DIR)/"
-	@cp ./config/.env.prod "$(CONFIG_DIR)/"
-	@cp ./config/.env.test "$(CONFIG_DIR)/"
 	@cp ./launch/*.sh "$(BINARY_DIR)/"
 	@chmod +x $(BINARY_DIR)/*.sh
 	echo "Branch: ${CI_COMMIT_REF_NAME}, BuildNo: ${BUILD_NUMBER}, BuildTime: ${DATETIME}, CommitID: ${CI_COMMIT_ID}" > "./dist/v_${CI_COMMIT_REF_NAME}_${BUILD_NUMBER}_${DATETIME}_${CI_COMMIT_ID}.txt"
@@ -58,8 +56,6 @@ cross-build:
 	@echo
 	@mkdir -p $(CONFIG_DIR)
 	@cp ./config/.env "$(CONFIG_DIR)/"
-	@cp ./config/.env.prod "$(CONFIG_DIR)/"
-	@cp ./config/.env.test "$(CONFIG_DIR)/"
 	@cp ./launch/*.sh "$(BINARY_DIR)/"
 	@chmod +x $(BINARY_DIR)/*.sh
 	@echo "Branch: ${CI_COMMIT_REF_NAME}, BuildNo: ${BUILD_NUMBER}, BuildTime: ${DATETIME}, CommitID: ${CI_COMMIT_ID}" > "./dist/v_${CI_COMMIT_REF_NAME}_${BUILD_NUMBER}_${DATETIME}_${CI_COMMIT_ID}.txt"
