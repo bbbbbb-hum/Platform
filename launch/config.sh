@@ -10,6 +10,10 @@ LOG_DIR="/opt/xllogs/${APP_DIR}"
 TMP_DIR="/tmp/xltmp/${APP_DIR}"
 CONFIG_DIR="/opt/xlconfigs/${APP_DIR}"
 
+mkdir -p "$BIN_DIR"
+mkdir -p "$LOG_DIR"
+mkdir -p "$TMP_DIR"
+mkdir -p "$CONFIG_DIR"
 
 
 EXEC_FILE="${BIN_DIR}/${SERVICE_NAME}"
