@@ -2,11 +2,8 @@
 
 # AgentEarth AgentPlatform 重启服务脚本
 
-# 获取脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# 加载配置
-source "$SCRIPT_DIR/config.sh"
+SCRIPT_DIR="$BIN_DIR"
+source "${SCRIPT_DIR}/config.sh"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 重启服务"
@@ -14,15 +11,9 @@ echo "========================================"
 echo "使用环境: $ENV"
 echo
 
-# 切换到项目根目录
-cd "$PROJECT_ROOT" || exit 1
 
-# 检查可执行文件是否存在
-if [ ! -f "$EXEC_FILE" ]; then
-    echo "错误: 可执行文件不存在: $EXEC_FILE"
-    echo "请先运行构建脚本: $SCRIPT_DIR/build.sh"
-    exit 1
-fi
+
+
 
 # 停止服务
 echo "正在停止现有服务..."
@@ -35,9 +26,9 @@ sleep 2
 # 检查端口是否已释放
 DEFAULT_PORT="9001"
 if [ -n "$ENV" ]; then
-    CONFIG_FILE_CHECK="/opt/xlconfigs/AgentEarth-AgentPlatform/.env.$ENV"
+    CONFIG_FILE_CHECK="${CONFIG_DIR}/.env.${ENV}"
 else
-    CONFIG_FILE_CHECK="config/.env"
+    CONFIG_FILE_CHECK="${CONFIG_DIR}/.env"
 fi
 
 if [ -f "$CONFIG_FILE_CHECK" ]; then
@@ -92,9 +83,9 @@ mkdir -p "$LOG_DIR"
 # 检查配置文件
 echo "正在检查配置文件..."
 if [ -n "$ENV" ]; then
-    CONFIG_FILE="/opt/xlconfigs/AgentEarth-AgentPlatform/.env.$ENV"
+    CONFIG_FILE="${CONFIG_DIR}/.env.${ENV}"
 else
-    CONFIG_FILE="config/.env"
+    CONFIG_FILE="${CONFIG_DIR}/.env"
 fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -115,11 +106,8 @@ echo "启动时间: $(date)"
 echo "========================================"
 echo
 
-# 创建临时日志文件用于捕获启动错误
-TEMP_LOG="/tmp/agent-platform-startup-$$.log"
-
-# 后台启动服务并保存PID，错误输出到临时文件
-nohup "$EXEC_FILE" --env=$ENV 2>"$TEMP_LOG" >/dev/null &
+# 后台启动服务并保存PID
+nohup "$EXEC_FILE" --env=$ENV 2>>"${LOG_FILE}" 2>&1 &
 PID=$!
 
 # 保存PID到文件

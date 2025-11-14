@@ -3,10 +3,10 @@
 # AgentEarth AgentPlatform 停止服务脚本
 
 # 获取脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$BIN_DIR"
 
 # 加载配置
-source "$SCRIPT_DIR/config.sh"
+source "${SCRIPT_DIR}/config.sh"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 停止服务"
