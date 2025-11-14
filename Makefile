@@ -42,6 +42,7 @@ build:
 	@cp ./config/.env "$(CONFIG_DIR)/"
 	@cp ./config/.env.prod "$(CONFIG_DIR)/"
 	@cp ./config/.env.test "$(CONFIG_DIR)/"
+	@cp ./launch/*.sh "$(BINARY_DIR)/"
 	@echo "Build completed: $(BINARY_PATH)"
 
 # ========================
@@ -57,6 +58,7 @@ cross-build:
 	@cp ./config/.env "$(CONFIG_DIR)/"
 	@cp ./config/.env.prod "$(CONFIG_DIR)/"
 	@cp ./config/.env.test "$(CONFIG_DIR)/"
+	@cp ./launch/*.sh "$(BINARY_DIR)/"
 	@echo "Build completed: $(BINARY_PATH)"
 
 # ========================
