@@ -2,8 +2,8 @@
 
 # AgentEarth AgentPlatform 服务状态检查脚本
 
+source "./config.sh"
 SCRIPT_DIR="$BIN_DIR"
-source "${SCRIPT_DIR}/config.sh"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 服务状态"

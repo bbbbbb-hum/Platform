@@ -4,6 +4,7 @@
 
 # 加载配置
 source "./config.sh"
+SCRIPT_DIR="$BIN_DIR"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 启动脚本"
