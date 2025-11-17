@@ -25,7 +25,6 @@ func init() {
 	//             "props", "prop", "env", "dotenv"
 	viper.SetConfigType("env")
 	// 3. 环境变量配置文件查找的路径，相对于 main.go
-	// todo: 路径不对？
 	viper.AddConfigPath(".")
 	// 4. 设置环境变量前缀，用以区分 Go 的系统环境变量
 	viper.SetEnvPrefix("appenv")

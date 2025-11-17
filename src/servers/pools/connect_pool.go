@@ -716,6 +716,8 @@ func (c *ConnectionPool) Close() {
 						logger.Error("关闭连接失败",
 							zap.String("instanceID", instanceID),
 							zap.Error(err))
+					} else {
+						logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
 					}
 				}
 			}
