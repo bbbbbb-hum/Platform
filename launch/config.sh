@@ -10,6 +10,10 @@ LOG_DIR="/opt/xllogs/${APP_DIR}"
 TMP_DIR="/tmp/xltmp/${APP_DIR}"
 CONFIG_DIR="/opt/xlconfigs/${APP_DIR}"
 
+mkdir -p "$BIN_DIR"
+mkdir -p "$LOG_DIR"
+mkdir -p "$TMP_DIR"
+mkdir -p "$CONFIG_DIR"
 
 
 EXEC_FILE="${BIN_DIR}/${SERVICE_NAME}"
@@ -21,7 +25,7 @@ LOG_FILE="${LOG_DIR}/${LOG_FILE_NAME}"
 
 # 服务进程ID记录文件
 PID_FILE_NAME="${SERVICE_NAME}.pid"
-PID_FILE="${BIN_DIR}/${PID_FILE_NAME}"
+PID_FILE="${CONFIG_DIR}/${PID_FILE_NAME}"
 
 
 

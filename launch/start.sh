@@ -4,6 +4,7 @@
 
 # 加载配置
 source "./config.sh"
+SCRIPT_DIR="$BIN_DIR"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 启动脚本"
@@ -27,7 +28,7 @@ fi
 
 # 2. 检查端口是否被占用（尝试从配置文件读取，失败则使用默认值）
 DEFAULT_PORT="9001"
-
+PORT=$DEFAULT_PORT
 
 
 
@@ -78,7 +79,7 @@ echo
 
 
 # 后台启动服务并保存PID
-nohup "$EXEC_FILE" --env=$ENV 2>>"${LOG_FILE}" 2>&1 &
+nohup "$EXEC_FILE" --env=$ENV >>"${LOG_FILE}" 2>&1 &
 PID=$!
 
 # 保存PID到文件
