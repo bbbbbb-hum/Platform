@@ -82,31 +82,34 @@ func main() {
 	// Prometheus metrics 端点（不需要认证）
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// 生产环境不开启
+	if env != "prod" {
+		// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	// 初始化单个服务接口
-	mux.HandleFunc("/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		pathId := r.URL.Path[len("/mcp-server/init/"):]
-		id, err := strconv.ParseInt(pathId, 10, 32)
-		if err != nil {
-			w.Write([]byte(err.Error()))
+		// 初始化单个服务接口
+		mux.HandleFunc("/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			pathId := r.URL.Path[len("/mcp-server/init/"):]
+			id, err := strconv.ParseInt(pathId, 10, 32)
+			if err != nil {
+				w.Write([]byte(err.Error()))
+				return
+			}
+			err = servers.InitializeByServiceId(int32(id))
+			if err != nil {
+				logger.Error("初始化MCP服务失败", zap.Error(err))
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.Write([]byte("MCP服务初始化完成"))
 			return
-		}
-		err = servers.InitializeByServiceId(int32(id))
-		if err != nil {
-			logger.Error("初始化MCP服务失败", zap.Error(err))
-			w.Write([]byte(err.Error()))
-			return
-		}
-		w.Write([]byte("MCP服务初始化完成"))
-		return
-	})
+		})
+	}
 
 	// 使用 Prometheus 中间件包装（先包装 SSE Handler，再添加认证，最后添加指标收集）
 	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(sseHandler.ServeHTTP))
