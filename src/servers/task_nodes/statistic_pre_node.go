@@ -61,7 +61,7 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 		CreateTime:   time.Now(),
 		UpdateTime:   time.Now(),
 	}
-	err = logModel.Create()
+	err = logModel.Create() //todo:数据库操作太多
 	if err != nil {
 		return
 	}

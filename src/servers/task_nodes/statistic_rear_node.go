@@ -60,6 +60,7 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 	var requestLogModel = &models.AeMcpServicesRequestLogs{
 		Id: logIdInt,
 	}
+	//todo:数据库操作太多
 	err = requestLogModel.GetOne()
 	if err != nil {
 		err = fmt.Errorf("get request log failed: %w", err)
