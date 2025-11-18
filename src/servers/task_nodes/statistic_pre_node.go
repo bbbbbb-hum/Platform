@@ -50,8 +50,8 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 	if err != nil {
 		return
 	}
-	// 创建统计日志
-	var logModel = &models.AeMcpServicesRequestLogs{
+	// 创建统计日志 放入上下文
+	rc.Stats["log"] = &models.AeMcpServicesRequestLogs{
 		ServerId:     s.NodeInfo.ServiceID,
 		ToolName:     userCmd,
 		RequestTime:  time.Now(),
@@ -61,11 +61,6 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 		CreateTime:   time.Now(),
 		UpdateTime:   time.Now(),
 	}
-	err = logModel.Create() //todo:数据库操作太多
-	if err != nil {
-		return
-	}
-	rc.Stats["log_id"] = logModel.Id
 	return
 }
 

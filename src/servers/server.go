@@ -16,6 +16,7 @@ import (
 )
 
 var McpServicesMap = map[string]*Server{}
+var RequestLogs = map[string]*models.AeMcpServicesRequestLogs{}
 
 type Server struct {
 	mcpServer     *mcp.Server

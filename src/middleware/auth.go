@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/models/users"
 	"fmt"
 	"net/http"
@@ -34,12 +33,8 @@ func NewAuth() *AuthMiddleware {
 	}
 	m.cache = make(map[string]apiKeyCacheEntry)
 	// 允许通过配置覆盖缓存 TTL（秒），未设置则默认 5 分钟
-	cacheTTLSeconds := helperConfig.GetInt("server.auth_cache_ttl_seconds")
-	if cacheTTLSeconds <= 0 {
-		m.cacheTTL = 5 * time.Minute
-	} else {
-		m.cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
-	}
+	cacheTTLSeconds := helperConfig.GetInt("server.auth_cache_ttl")
+	m.cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
 	return m
 }
 
@@ -85,50 +80,25 @@ func (a *AuthMiddleware) ValidateAPIKey(apiKey string) bool {
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to validate API key: %v", err))
 		// 负缓存，短 TTL，避免打爆数据库
-		a.setCache(apiKey, false, 30*time.Second)
+		a.setCache(apiKey, false, a.cacheTTL)
 		return false
 	}
 
 	if userKeysModel.Id <= 0 {
 		logger.Error("API key not found in database")
-		a.setCache(apiKey, false, 30*time.Second)
+		a.setCache(apiKey, false, a.cacheTTL)
 		return false
 	}
 
 	// 检查密钥状态
 	if userKeysModel.Status != "active" {
 		logger.Error(fmt.Sprintf("API key status is not active: %s", userKeysModel.Status))
-		a.setCache(apiKey, false, 30*time.Second)
+		a.setCache(apiKey, false, a.cacheTTL)
 		return false
 	}
 
-	// 检查密钥是否过期
-	if !userKeysModel.ExpiresAt.IsZero() && time.Now().After(userKeysModel.ExpiresAt) {
-		logger.Error("API key has expired")
-		a.setCache(apiKey, false, 30*time.Second)
-		return false
-	}
-
-	// 异步更新使用统计
-	go func() {
-		updateModel := userKeysModel
-		updateModel.LastUsedAt = time.Now()
-		updateModel.UsageCount++
-		models.GetDB().Save(&updateModel)
-	}()
-
-	// 缓存成功结果；若密钥本身设置了过期时间，则使用剩余有效期与缓存 TTL 的较小值
-	ttl := a.cacheTTL
-	if !userKeysModel.ExpiresAt.IsZero() {
-		if remaining := time.Until(userKeysModel.ExpiresAt); remaining > 0 && remaining < ttl {
-			ttl = remaining
-		}
-	}
-	// 防御性：避免非正 TTL
-	if ttl <= 0 {
-		ttl = 30 * time.Second
-	}
-	a.setCache(apiKey, true, ttl)
+	// 缓存写入
+	a.setCache(apiKey, true, a.cacheTTL)
 
 	return true
 }

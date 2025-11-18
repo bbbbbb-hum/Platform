@@ -3,6 +3,7 @@ package task_nodes
 import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
+	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
 	"time"
@@ -46,36 +47,26 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 		currentResp = lastStepResp
 	}
 
-	// 更新请求日志
-	logId, ok := rc.Stats["log_id"]
+	// 从上下文获取请求日志
+	log, ok := rc.Stats["log"]
 	if !ok {
-		err = fmt.Errorf("log_id not found")
+		err = fmt.Errorf("log not found in context")
 		return
 	}
-	logIdInt, ok := logId.(int32)
+	requestLogModel, ok := log.(*models.AeMcpServicesRequestLogs)
 	if !ok {
-		err = fmt.Errorf("log_id is not int32")
+		err = fmt.Errorf("log is not *models.AeMcpServicesRequestLogs")
 		return
 	}
-	var requestLogModel = &models.AeMcpServicesRequestLogs{
-		Id: logIdInt,
-	}
-	//todo:数据库操作太多
-	err = requestLogModel.GetOne()
-	if err != nil {
-		err = fmt.Errorf("get request log failed: %w", err)
-		return
-	}
+
+	// 更新日志信息
 	requestLogModel.ReturnTime = time.Now()
 	requestLogModel.ResponseTime = int32(requestLogModel.ReturnTime.UnixMilli() - requestLogModel.RequestTime.UnixMilli())
 	requestLogModel.Status = 1
-	err = requestLogModel.Update()
-	if err != nil {
-		return
-	}
-	// 更新调用成功次数
-	var serviceModel = &models.AeMcpServices{}
-	err = serviceModel.UpdateCallSuccess(s.NodeInfo.ServiceID)
+	requestLogModel.UpdateTime = time.Now()
+
+	// 将更新后的日志加入批量插入队列
+	pools.GetRequestLogsPool().Add(requestLogModel)
 	return
 }
 

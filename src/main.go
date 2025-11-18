@@ -57,6 +57,9 @@ func main() {
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
+	// 启动请求日志批量插入协程（每秒同步一次）
+	pools.GetRequestLogsPool().Start(1 * time.Second)
+
 	// 初始化 mcp 服务
 	//test1Server := server.NewServer()
 	sseHandler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
@@ -143,12 +146,13 @@ func main() {
 	logger.Info("收到终止信号，开始优雅关闭...", zap.String("signal", sig.String()))
 
 	// 创建关闭超时上下文
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer shutdownCancel()
 
 	// 关闭所有 MCP 连接池（会清理所有 npx/uvx 子进程）
 	logger.Info("正在关闭连接池，清理子进程...")
 	pools.GetConnectPool().Close()
+	pools.GetRequestLogsPool().Stop()
 	logger.Info("连接池关闭完成")
 
 	// 优雅关闭 HTTP 服务器
