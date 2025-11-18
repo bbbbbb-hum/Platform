@@ -92,9 +92,9 @@ func main() {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 		// 初始化单个服务接口
-		mux.HandleFunc("/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("/debug/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			pathId := r.URL.Path[len("/mcp-server/init/"):]
+			pathId := r.URL.Path[len("/debug/mcp-server/init/"):]
 			id, err := strconv.ParseInt(pathId, 10, 32)
 			if err != nil {
 				w.Write([]byte(err.Error()))
