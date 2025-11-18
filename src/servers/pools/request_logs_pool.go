@@ -136,12 +136,13 @@ func (p *RequestLogsPool) flush() {
 	}
 	// 创建临时切片，避免长时间持有锁
 	batch := make([]*models.AeMcpServicesRequestLogs, len(p.logs))
-	copy(batch, p.logs)
+	copy(batch, p.logs) //todo:多了一次copy
 	// 清空原切片
 	p.logs = p.logs[:0]
 	p.mutex.Unlock()
 
 	// 如果批量大小超过限制，分批插入
+	// todo:不需要重复判断
 	if len(batch) > p.maxBatchSize {
 		p.flushInBatches(batch)
 	} else {

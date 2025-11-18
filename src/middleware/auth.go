@@ -70,8 +70,8 @@ func (a *AuthMiddleware) ValidateAPIKey(apiKey string) bool {
 	}
 
 	// 1) 先查缓存
-	if ok, hit := a.getFromCache(apiKey); hit {
-		return ok
+	if isExpired, hit := a.getFromCache(apiKey); hit {
+		return isExpired
 	}
 
 	// 检查API密钥是否在允许列表中
