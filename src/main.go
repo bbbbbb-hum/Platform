@@ -58,7 +58,7 @@ func main() {
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
 	// 启动请求日志批量插入协程（每秒同步一次）
-	pools.GetRequestLogsPool().Start(1 * time.Second)
+	pools.GetRequestLogsPool().Start(60 * time.Second)
 
 	// 初始化 mcp 服务
 	//test1Server := server.NewServer()
