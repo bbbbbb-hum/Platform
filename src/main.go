@@ -57,7 +57,7 @@ func main() {
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
-	// 启动请求日志批量插入协程（每秒同步一次）
+	// 启动请求日志批量插入协程（每分钟同步一次）
 	pools.GetRequestLogsPool().Start(60 * time.Second)
 
 	// 初始化 mcp 服务

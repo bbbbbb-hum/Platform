@@ -18,7 +18,6 @@ type ConfigFunc func() map[string]interface{}
 var ConfigFuncs map[string]ConfigFunc
 
 func init() {
-
 	// 1. 初始化 Viper 库
 	viper = viperlib.New()
 	// 2. 配置类型，支持 "json", "toml", "yaml", "yml", "properties",
@@ -49,7 +48,8 @@ func loadConfig() {
 func loadEnv(envSuffix string) {
 
 	// 默认加载 .env 文件，如果有传参 --env=name 的话，加载 .env.name 文件
-	envPath := "D:\\wcs\\Code\\AgentEarth-AgentPlatform\\config\\.env"
+	envPath := "./config/.env"
+
 	if len(envSuffix) > 0 {
 		filepath := "/opt/xlconfigs/AgentEarth-AgentPlatform/.env." + envSuffix
 		if _, err := os.Stat(filepath); err == nil {
