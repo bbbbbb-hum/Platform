@@ -22,6 +22,7 @@ type (
 		mutex    sync.RWMutex
 		// 维护协程控制
 		maintainStop chan struct{}
+		maintainWG   sync.WaitGroup
 	}
 	// 外部服务定义
 	ExternalService struct {
@@ -715,6 +716,8 @@ func (c *ConnectionPool) Close() {
 						logger.Error("关闭连接失败",
 							zap.String("instanceID", instanceID),
 							zap.Error(err))
+					} else {
+						logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
 					}
 				}
 			}
@@ -733,9 +736,12 @@ func (c *ConnectionPool) StartMaintainer(interval time.Duration) {
 	}
 	stop := make(chan struct{})
 	c.maintainStop = stop
+	// 在启动 goroutine 前登记
+	c.maintainWG.Add(1)
 	c.mutex.Unlock()
 
 	go func() {
+		defer c.maintainWG.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -757,6 +763,8 @@ func (c *ConnectionPool) StopMaintainer() {
 		c.maintainStop = nil
 	}
 	c.mutex.Unlock()
+	// 等待维护协程退出，避免与 Close 中的资源释放并发冲突
+	c.maintainWG.Wait()
 }
 
 // maintainOnce 执行一次维护：检测连接、剔除无效、补齐缺口

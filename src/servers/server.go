@@ -16,6 +16,7 @@ import (
 )
 
 var McpServicesMap = map[string]*Server{}
+var RequestLogs = map[string]*models.AeMcpServicesRequestLogs{}
 
 type Server struct {
 	mcpServer     *mcp.Server
@@ -62,6 +63,30 @@ func Initialize() error {
 	return nil
 }
 
+// InitializeByServiceId 根据服务ID初始化MCP服务
+func InitializeByServiceId(id int32) error {
+	service := &models.AeMcpServices{}
+	err := service.GetOne(id)
+	if err != nil {
+		return fmt.Errorf("获取MCP服务失败: %w", err)
+	}
+	if service.Id == 0 {
+		return fmt.Errorf("MCP服务不存在")
+	}
+	// 检查一下Map中是否已经存在该服务
+	if _, ok := McpServicesMap[service.ServerId]; ok {
+		logger.Info("MCP服务已存在", zap.String("service_id", service.ServerId))
+		return nil
+	}
+	server := createMcpServer(service)
+	if server != nil {
+		McpServicesMap[service.ServerId] = server
+	}
+	logger.Info("MCP服务初始化完成", zap.String("service_id", service.ServerId))
+	return nil
+}
+
+// 创建MCP服务实例
 func createMcpServer(service *models.AeMcpServices) *Server {
 	server := &Server{}
 

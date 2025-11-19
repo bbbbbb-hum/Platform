@@ -2,11 +2,8 @@
 
 # AgentEarth AgentPlatform 服务状态检查脚本
 
-# 获取脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# 加载配置
-source "$SCRIPT_DIR/config.sh"
+source "./config.sh"
+SCRIPT_DIR="$BIN_DIR"
 
 echo "========================================"
 echo "   AgentEarth AgentPlatform 服务状态"
@@ -71,9 +68,9 @@ echo
 # 3. 检查配置文件和端口
 DEFAULT_PORT="9001"
 if [ -n "$ENV" ]; then
-    CONFIG_FILE_CHECK="/opt/xlconfigs/AgentEarth-AgentPlatform/.env.$ENV"
+    CONFIG_FILE_CHECK="${CONFIG_DIR}/.env.${ENV}"
 else
-    CONFIG_FILE_CHECK="config/.env"
+    CONFIG_FILE_CHECK="${CONFIG_DIR}/.env"
 fi
 
 echo "配置信息:"

@@ -33,6 +33,10 @@ func (m *AeMcpServices) TableName() string {
 	return TableNameAeMcpServices
 }
 
+func (m *AeMcpServices) GetOne(id int32) error {
+	db := GetDB()
+	return db.Where("id = ?", id).First(m).Error
+}
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
 	db = db.Where("is_created = ?", true)

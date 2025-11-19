@@ -14,6 +14,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -56,6 +57,9 @@ func main() {
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
+	// 启动请求日志批量插入协程（每分钟同步一次）
+	pools.GetRequestLogsPool().Start(60 * time.Second)
+
 	// 初始化 mcp 服务
 	//test1Server := server.NewServer()
 	sseHandler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
@@ -81,23 +85,44 @@ func main() {
 	// Prometheus metrics 端点（不需要认证）
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// 生产环境不开启
+	if env != "prod" {
+		// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	// 修改路由格式：/mcp-server/{server_id}/sse
+		// 初始化单个服务接口
+		mux.HandleFunc("/debug/mcp-server/init/{id}", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			pathId := r.URL.Path[len("/debug/mcp-server/init/"):]
+			id, err := strconv.ParseInt(pathId, 10, 32)
+			if err != nil {
+				w.Write([]byte(err.Error()))
+				return
+			}
+			err = servers.InitializeByServiceId(int32(id))
+			if err != nil {
+				logger.Error("初始化MCP服务失败", zap.Error(err))
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.Write([]byte("MCP服务初始化完成"))
+			return
+		})
+	}
+
 	// 使用 Prometheus 中间件包装（先包装 SSE Handler，再添加认证，最后添加指标收集）
-	mcpHandler := middleware.PrometheusMiddleware(http.HandlerFunc(authMiddleware.Auth(sseHandler.ServeHTTP)))
+	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(sseHandler.ServeHTTP))
 	mux.Handle("/mcp-server/", mcpHandler)
 
 	// 创建 HTTP 服务器
 	host := helperConfig.GetString("server.host")
 	port := helperConfig.GetString("server.port")
 	addr := host + ":" + port
-	
+
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
@@ -121,12 +146,13 @@ func main() {
 	logger.Info("收到终止信号，开始优雅关闭...", zap.String("signal", sig.String()))
 
 	// 创建关闭超时上下文
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer shutdownCancel()
 
 	// 关闭所有 MCP 连接池（会清理所有 npx/uvx 子进程）
 	logger.Info("正在关闭连接池，清理子进程...")
 	pools.GetConnectPool().Close()
+	pools.GetRequestLogsPool().Stop()
 	logger.Info("连接池关闭完成")
 
 	// 优雅关闭 HTTP 服务器

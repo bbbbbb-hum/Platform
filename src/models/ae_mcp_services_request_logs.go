@@ -43,3 +43,8 @@ func GetLogsByServerId(serverId string) ([]AeMcpServicesRequestLogs, error) {
 func (l *AeMcpServicesRequestLogs) GetOne() error {
 	return GetDB().Where("id = ?", l.Id).First(l).Error
 }
+
+// BatchInsert 批量插入日志
+func BatchInsert(list []*AeMcpServicesRequestLogs) error {
+	return GetDB().Create(list).Error
+}
