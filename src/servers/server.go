@@ -74,7 +74,6 @@ func InitializeByServiceId(id int32) error {
 		return fmt.Errorf("MCP服务不存在")
 	}
 	// 检查一下Map中是否已经存在该服务
-	// todo:应该先检查map中是否已存在，再调用数据库进行查询初始化
 	if _, ok := McpServicesMap[service.ServerId]; ok {
 		logger.Info("MCP服务已存在", zap.String("service_id", service.ServerId))
 		return nil
