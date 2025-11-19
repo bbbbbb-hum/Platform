@@ -115,11 +115,7 @@ func (p *RequestLogsPool) Stop() {
 		p.mutex.Unlock()
 
 		// 插入剩余数据
-		if len(batch) > p.maxBatchSize {
-			p.flushInBatches(batch)
-		} else {
-			p.insertBatch(batch)
-		}
+		p.flushInBatches(batch)
 		logger.Info("停止时同步剩余日志", zap.Int("count", len(batch)))
 	}
 
@@ -135,19 +131,13 @@ func (p *RequestLogsPool) flush() {
 		return
 	}
 	// 创建临时切片，避免长时间持有锁
-	batch := make([]*models.AeMcpServicesRequestLogs, len(p.logs))
-	copy(batch, p.logs) //todo:多了一次copy
+	batch := p.logs
 	// 清空原切片
 	p.logs = p.logs[:0]
 	p.mutex.Unlock()
 
 	// 如果批量大小超过限制，分批插入
-	// todo:不需要重复判断
-	if len(batch) > p.maxBatchSize {
-		p.flushInBatches(batch)
-	} else {
-		p.insertBatch(batch)
-	}
+	p.flushInBatches(batch)
 }
 
 // flushInBatches 分批插入（当批量过大时）
