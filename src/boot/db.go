@@ -18,7 +18,8 @@ import (
 
 func SetupDB() {
 	var dbConfig gorm.Dialector
-	switch config.Get("database.connection") {
+	connType := config.Get("database.connection")
+	switch connType {
 	case "mysql":
 		// 构建 DSN 信息
 		dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=%v&parseTime=True&multiStatements=true&loc=Local",
@@ -64,18 +65,12 @@ func SetupDB() {
 		logger.Error("连接失败", zap.String("error", "database.DB is nil"))
 		return
 	}
-	// 测试数据库连接
+	// 测试数据库连接（获取 sql.DB）
 	sqlDB, err := database.DB.DB()
 	if err != nil {
 		logger.Error("获取底层数据库连接失败", zap.String("error", err.Error()))
 		return
 	}
-
-	if err = sqlDB.Ping(); err != nil {
-		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
-	}
-
-	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 
 	// 检查 database.SQLDB 是否有效
 	if database.SQLDB == nil {
@@ -83,14 +78,44 @@ func SetupDB() {
 		return
 	}
 
-	// 设置最大连接数
-	database.SQLDB.SetMaxOpenConns(config.GetInt("database.max_open_connections"))
-	// 设置最大空闲连接数
-	database.SQLDB.SetMaxIdleConns(config.GetInt("database.max_idle_connections"))
-	// 设置每个链接的过期时间
-	database.SQLDB.SetConnMaxLifetime(time.Duration(config.GetInt("database.max_life_seconds")) * time.Second)
+	// 基于当前驱动读取连接池参数（避免读取到不存在的顶层键导致无限制）
+	var prefix string
+	switch connType {
+	case "mysql":
+		prefix = "database.mysql."
+	case "postgres":
+		prefix = "database.postgres."
+	case "sqlite":
+		prefix = "database.sqlite."
+	default:
+		prefix = "database."
+	}
+	maxOpen := config.GetInt(prefix + "max_open_connections")
+	if maxOpen <= 0 {
+		maxOpen = 25
+	}
+	maxIdle := config.GetInt(prefix + "max_idle_connections")
+	if maxIdle < 0 {
+		maxIdle = 0
+	}
+	maxLife := config.GetInt(prefix + "max_life_seconds")
+	if maxLife <= 0 {
+		maxLife = 300
+	}
+	// 先应用连接池参数，再进行 Ping，避免启动阶段瞬时超配
+	database.SQLDB.SetMaxOpenConns(maxOpen)
+	database.SQLDB.SetMaxIdleConns(maxIdle)
+	database.SQLDB.SetConnMaxLifetime(time.Duration(maxLife) * time.Second)
+	logger.Info("数据库连接池参数已应用",
+		zap.Int("max_open_conns", maxOpen),
+		zap.Int("max_idle_conns", maxIdle),
+		zap.Int("conn_max_life_seconds", maxLife),
+	)
 
 	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pools configured"))
-
+	if err = sqlDB.Ping(); err != nil {
+		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
+	}
+	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 	// database.DB.AutoMigrate(&user.User{})
 }

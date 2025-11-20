@@ -32,6 +32,8 @@ type (
 		Node     Processor //节点实现的接口
 	}
 	NodeInfo struct {
+		ServiceID               string   `json:"service_id"`
+		ChainID                 int32    `json:"chain_id"`
 		NodeID                  int32    `json:"node_id"`                    // 数据库中的节点ID
 		NodeHandle              string   `json:"node_handle"`                // 节点执行函数
 		NodeName                string   `json:"node_name"`                  // 节点名称

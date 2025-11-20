@@ -18,6 +18,8 @@ type ProxyNode struct {
 func (p *ProxyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化代理节点", zap.String("node_id", string(config.NodeModel.Id)))
 	p.NodeInfo = &types.NodeInfo{
+		ServiceID:               config.ServiceID,
+		ChainID:                 config.ChainModel.Id,
 		NodeID:                  config.NodeModel.Id,
 		NodeHandle:              config.NodeModel.NodeHandle,
 		NodeName:                config.NodeModel.NodeName,

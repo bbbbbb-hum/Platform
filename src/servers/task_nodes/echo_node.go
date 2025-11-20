@@ -21,10 +21,14 @@ type EchoNode struct {
 func (e *EchoNode) Init(config types.InitConfig) error {
 	logger.Info("初始化回声工具节点", zap.String("node_id", string(config.NodeModel.Id)))
 	e.NodeInfo = &types.NodeInfo{
-		NodeID:      config.NodeModel.Id,
-		NodeHandle:  config.NodeModel.NodeHandle,
-		NodeName:    config.NodeModel.NodeName,
-		Description: config.NodeModel.Description,
+		ServiceID:               config.ServiceID,
+		ChainID:                 config.ChainModel.Id,
+		NodeID:                  config.NodeModel.Id,
+		NodeHandle:              config.NodeModel.NodeHandle,
+		NodeName:                config.NodeModel.NodeName,
+		Description:             config.NodeModel.Description,
+		Enabled:                 true,
+		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	return nil
 }

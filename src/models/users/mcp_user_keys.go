@@ -7,7 +7,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-const TableNameMcpUserKeys = "mcp_user_keys"
+const TableNameMcpUserKeys = "ae_user_keys"
 
 // 用户密钥表
 type McpUserKeys struct {

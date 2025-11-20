@@ -22,6 +22,7 @@ type (
 		mutex    sync.RWMutex
 		// 维护协程控制
 		maintainStop chan struct{}
+		maintainWG   sync.WaitGroup
 	}
 	// 外部服务定义
 	ExternalService struct {
@@ -126,10 +127,10 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 	}
 
 	// 加载账号配置
-	service, err = c.loadAccountConfigs(service)
-	if err != nil {
-		return err
-	}
+	//service, err = c.loadAccountConfigs(service)
+	//if err != nil {
+	//	return err
+	//}
 
 	// 创建实例信息
 	switch service.Type {
@@ -464,11 +465,27 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 		Name:    "AgentEarth-Proxy-Stdio",
 		Version: "v1.0.0",
 	}, nil)
-	logger.Debug("连接前...", zap.Any("command", cmd))
-	session, err1 := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
-	logger.Debug("连接后...", zap.Any("session", session))
+
+	// 创建带超时的context，100秒后自动取消
+	connectCtx, cancel := context.WithTimeout(ctx, time.Duration(launchInfo.LaunchTimeout)*time.Millisecond)
+	defer cancel()
+
+	logger.Debug("连接前...", zap.Any("command", cmd), zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond))
+	startTime := time.Now()
+	session, err1 := client.Connect(connectCtx, &mcp.CommandTransport{Command: cmd}, nil)
+	duration := time.Since(startTime)
+	logger.Debug("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
+
 	if err1 != nil {
-		logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
+		if connectCtx.Err() == context.DeadlineExceeded {
+			logger.Error("连接超时，已中断cmd命令执行",
+				zap.Error(err1),
+				zap.Int32("aid", aid),
+				zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond),
+				zap.Duration("elapsed", duration))
+		} else {
+			logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
+		}
 		err = err1
 		return
 	}
@@ -485,61 +502,61 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 // 按httpStreamable创建实例
 func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, service *ExternalService) (newService *ExternalService, err error) {
 	newService = service
-	if service.ConnectInfo.Headers != nil {
-		//需要鉴权
-		// 准备认证头
-		for i, account := range service.Accounts {
-			if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
-				// 创建连接配置副本，避免修改原始配置
-				connectInfoCopy := *service.ConnectInfo
-				connectInfoCopy.Headers = make(map[string]string)
-
-				// 合并原始headers和认证信息
-				for k, v := range service.ConnectInfo.Headers {
-					connectInfoCopy.Headers[k] = v
-				}
-				for k, v := range account.AuthInfo {
-					connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
-				}
-
-				//按当前账号信息创建实例
-				instance := &ServiceInstance{
-					AccountId:           account.AccountID,
-					InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
-					Connections:         make([]*ExternalConnection, 0),
-					ResolvedConnectInfo: &connectInfoCopy,
-					TargetConnections:   1,
-				}
-				//创建连接
-				connection, err1 := c.createHttpStreamableConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
-				if err1 != nil {
-					logger.Error("创建http实例连接失败", zap.Error(err1))
-					continue
-				}
-				instance.Connections = append(instance.Connections, connection)
-				newService.InstanceMap[instance.InstanceId] = instance
-			}
+	//if service.ConnectInfo.Headers != nil {
+	//	//需要鉴权
+	//	// 准备认证头
+	//	for i, account := range service.Accounts {
+	//		if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
+	//			// 创建连接配置副本，避免修改原始配置
+	//			connectInfoCopy := *service.ConnectInfo
+	//			connectInfoCopy.Headers = make(map[string]string)
+	//
+	//			// 合并原始headers和认证信息
+	//			for k, v := range service.ConnectInfo.Headers {
+	//				connectInfoCopy.Headers[k] = v
+	//			}
+	//			for k, v := range account.AuthInfo {
+	//				connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
+	//			}
+	//
+	//			//按当前账号信息创建实例
+	//			instance := &ServiceInstance{
+	//				AccountId:           account.AccountID,
+	//				InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
+	//				Connections:         make([]*ExternalConnection, 0),
+	//				ResolvedConnectInfo: &connectInfoCopy,
+	//				TargetConnections:   1,
+	//			}
+	//			//创建连接
+	//			connection, err1 := c.createHttpStreamableConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
+	//			if err1 != nil {
+	//				logger.Error("创建http实例连接失败", zap.Error(err1))
+	//				continue
+	//			}
+	//			instance.Connections = append(instance.Connections, connection)
+	//			newService.InstanceMap[instance.InstanceId] = instance
+	//		}
+	//	}
+	//} else {
+	//无需鉴权
+	for i := 0; i < int(service.MaxInstance); i++ {
+		instance := &ServiceInstance{
+			AccountId:           int32(i),
+			InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
+			Connections:         make([]*ExternalConnection, 0),
+			ResolvedConnectInfo: service.ConnectInfo,
+			TargetConnections:   1,
 		}
-	} else {
-		//无需鉴权
-		for i := 0; i < int(service.MaxInstance); i++ {
-			instance := &ServiceInstance{
-				AccountId:           int32(i),
-				InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
-				Connections:         make([]*ExternalConnection, 0),
-				ResolvedConnectInfo: service.ConnectInfo,
-				TargetConnections:   1,
-			}
-			//创建连接
-			connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
-			if err1 != nil {
-				logger.Error("创建http实例连接失败", zap.Error(err1))
-				continue
-			}
-			instance.Connections = append(instance.Connections, connection)
-			newService.InstanceMap[instance.InstanceId] = instance
+		//创建连接
+		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
+		if err1 != nil {
+			logger.Error("创建http实例连接失败", zap.Error(err1))
+			continue
 		}
+		instance.Connections = append(instance.Connections, connection)
+		newService.InstanceMap[instance.InstanceId] = instance
 	}
+	//}
 	return
 }
 
@@ -699,6 +716,8 @@ func (c *ConnectionPool) Close() {
 						logger.Error("关闭连接失败",
 							zap.String("instanceID", instanceID),
 							zap.Error(err))
+					} else {
+						logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
 					}
 				}
 			}
@@ -717,9 +736,12 @@ func (c *ConnectionPool) StartMaintainer(interval time.Duration) {
 	}
 	stop := make(chan struct{})
 	c.maintainStop = stop
+	// 在启动 goroutine 前登记
+	c.maintainWG.Add(1)
 	c.mutex.Unlock()
 
 	go func() {
+		defer c.maintainWG.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -741,6 +763,8 @@ func (c *ConnectionPool) StopMaintainer() {
 		c.maintainStop = nil
 	}
 	c.mutex.Unlock()
+	// 等待维护协程退出，避免与 Close 中的资源释放并发冲突
+	c.maintainWG.Wait()
 }
 
 // maintainOnce 执行一次维护：检测连接、剔除无效、补齐缺口

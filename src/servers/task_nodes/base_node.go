@@ -18,6 +18,12 @@ var NodeRegistry = map[string]func() types.Processor{
 	"proxy_handle": func() types.Processor {
 		return &ProxyNode{}
 	},
+	"statistic_pre_handle": func() types.Processor {
+		return &StatisticPreNode{}
+	},
+	"statistic_rear_handle": func() types.Processor {
+		return &StatisticRearNode{}
+	},
 }
 
 // CreateNodeByType 根据node_type创建节点实例

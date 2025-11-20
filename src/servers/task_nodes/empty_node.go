@@ -17,11 +17,14 @@ type EmptyNode struct {
 func (e *EmptyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化空节点", zap.String("node_id", string(config.NodeModel.Id)))
 	e.NodeInfo = &types.NodeInfo{
-		NodeID:      config.NodeModel.Id,
-		NodeHandle:  config.NodeModel.NodeHandle,
-		NodeName:    config.NodeModel.NodeName,
-		Description: config.NodeModel.Description,
-		Enabled:     true,
+		ServiceID:               config.ServiceID,
+		ChainID:                 config.ChainModel.Id,
+		NodeID:                  config.NodeModel.Id,
+		NodeHandle:              config.NodeModel.NodeHandle,
+		NodeName:                config.NodeModel.NodeName,
+		Description:             config.NodeModel.Description,
+		Enabled:                 true,
+		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	// 空节点不提供任何工具
 	logger.Info("空节点初始化完成，不提供任何工具")
