@@ -51,7 +51,7 @@ func loadEnv(envSuffix string) {
 	envPath := "./config/.env"
 
 	if len(envSuffix) > 0 {
-		filepath := "/opt/xlconfigs/AgentEarth-AgentPlatform/.env." + envSuffix
+		filepath := "/opt/xlconfigs/AEPlatformAPI/.env." + envSuffix
 		if _, err := os.Stat(filepath); err == nil {
 			// 如 .env.testing 或 .env.stage
 			envPath = filepath
