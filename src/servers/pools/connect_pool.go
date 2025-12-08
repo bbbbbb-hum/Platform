@@ -5,6 +5,7 @@ import (
 	"AgentEarth_AgentPlatform/src/models/config"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -163,6 +164,7 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 				logger.Warn("获取工具列表失败", zap.Error(err1))
 			} else {
 				service.Tools = tools
+				logger.Info("工具数量:", zap.String("ServiceName", service.ServiceName), zap.Any("tools_nums", len(service.Tools)))
 			}
 
 		}
@@ -477,7 +479,7 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 	logger.Debug("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
 
 	if err1 != nil {
-		if connectCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
 			logger.Error("连接超时，已中断cmd命令执行",
 				zap.Error(err1),
 				zap.Int32("aid", aid),
