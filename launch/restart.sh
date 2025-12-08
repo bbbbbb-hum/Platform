@@ -12,9 +12,6 @@ echo "使用环境: $ENV"
 echo
 
 
-
-
-
 # 停止服务
 echo "正在停止现有服务..."
 "$SCRIPT_DIR/stop.sh"
