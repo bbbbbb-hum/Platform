@@ -42,7 +42,7 @@ func (l GormLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
 
 // Info 实现 gormlogger.Interface 的 Info 方法
 func (l GormLogger) Info(ctx context.Context, str string, args ...interface{}) {
-	l.logger().Sugar().Debugf(str, args...)
+	l.logger().Sugar().Infof(str, args...)
 }
 
 // Warn 实现 gormlogger.Interface 的 Warn 方法
@@ -87,8 +87,8 @@ func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (strin
 		l.logger().Warn("Database Slow Log", logFields...)
 	}
 
-	// 记录所有 SQL 请求
-	l.logger().Debug("Database Query", logFields...)
+	// 记录所有 SQL 请求（使用 Info 级别，确保在生产环境 Info 级别时也能看到 SQL 查询）
+	l.logger().Info("Database Query", logFields...)
 }
 
 // logger 内用的辅助方法，确保 Zap 内置信息 Caller 的准确性（如 paginator/paginator.go:148）

@@ -49,6 +49,7 @@ func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types
 		externalTools := pools.GetConnectPool().GetServiceTools(p.NodeInfo.ExternalServiceConfigID)
 		logger.Debug("工具列表", zap.Int("工具数量", len(externalTools)))
 		for _, tool := range externalTools {
+			logger.Debug("工具", zap.String("工具名称", tool.Name), zap.Any("工具输入参数", tool.InputSchema))
 			// 将该节点上贡献的工具名称保存到节点信息中
 			p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
 			// 修改工具输入参数的schema的版本
