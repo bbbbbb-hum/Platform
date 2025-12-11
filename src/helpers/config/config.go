@@ -48,7 +48,7 @@ func loadConfig() {
 func loadEnv(envSuffix string) {
 
 	// 默认加载 .env 文件，如果有传参 --env=name 的话，加载 .env.name 文件
-	envPath := "./config/.env"
+	envPath := "./config/.env.local"
 
 	if len(envSuffix) > 0 {
 		filepath := "/opt/xlconfigs/AEPlatformAPI/.env." + envSuffix

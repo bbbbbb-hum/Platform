@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -16,6 +17,86 @@ import (
 
 // Logger 全局 Logger 对象
 var Logger *zap.Logger
+
+// dailyRotateWriter 按日期自动切换日志文件的 WriteSyncer
+type dailyRotateWriter struct {
+	baseFilename  string // 基础文件名，如 storage/logs/logs.log
+	maxSize       int
+	maxBackups    int
+	maxAge        int
+	compress      bool
+	currentDate   string // 当前日期，格式：2006-01-02
+	currentLogger *lumberjack.Logger
+	mu            sync.Mutex
+}
+
+// newDailyRotateWriter 创建按日期自动切换的日志写入器
+func newDailyRotateWriter(baseFilename string, maxSize, maxBackups, maxAge int, compress bool) *dailyRotateWriter {
+	writer := &dailyRotateWriter{
+		baseFilename: baseFilename,
+		maxSize:      maxSize,
+		maxBackups:   maxBackups,
+		maxAge:       maxAge,
+		compress:     compress,
+	}
+	// 初始化当前日期的日志文件
+	writer.rotateIfNeeded()
+	return writer
+}
+
+// rotateIfNeeded 检查日期并切换日志文件（如果需要）
+func (w *dailyRotateWriter) rotateIfNeeded() {
+	now := helpers.TimeNowInTimezone()
+	currentDate := now.Format("2006-01-02")
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	// 如果日期没有变化，不需要切换
+	if currentDate == w.currentDate && w.currentLogger != nil {
+		return
+	}
+
+	// 日期变化，创建新的日志文件
+	w.currentDate = currentDate
+	logname := currentDate + ".log"
+
+	// 从基础文件名中提取目录
+	dir := filepath.Dir(w.baseFilename)
+	newFilename := filepath.Join(dir, logname)
+
+	// 创建新的 lumberjack.Logger
+	w.currentLogger = &lumberjack.Logger{
+		Filename:   newFilename,
+		MaxSize:    w.maxSize,
+		MaxBackups: w.maxBackups,
+		MaxAge:     w.maxAge,
+		Compress:   w.compress,
+	}
+}
+
+// Write 实现 io.Writer 接口
+func (w *dailyRotateWriter) Write(p []byte) (n int, err error) {
+	// 每次写入前检查日期
+	w.rotateIfNeeded()
+
+	w.mu.Lock()
+	logger := w.currentLogger
+	w.mu.Unlock()
+
+	return logger.Write(p)
+}
+
+// Sync 实现 zapcore.WriteSyncer 接口
+func (w *dailyRotateWriter) Sync() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.currentLogger != nil {
+		// lumberjack.Logger 没有 Sync 方法，返回 nil
+		return nil
+	}
+	return nil
+}
 
 // InitLogger 日志初始化
 func InitLogger(filename string, maxSize, maxBackup, maxAge int, compress bool, logType string, level string, isLocal bool) {
@@ -40,26 +121,32 @@ func InitLogger(filename string, maxSize, maxBackup, maxAge int, compress bool, 
 
 // getLogWriter 日志记录介质。Gohub 中使用了两种介质，os.Stdout 和文件
 func getLogWriter(filename string, maxSize, maxBackup, maxAge int, compress bool, logType string, isLocal bool) zapcore.WriteSyncer {
+	var fileWriter zapcore.WriteSyncer
+
 	// 如果配置了按照日期记录日志文件
 	if logType == "daily" {
-		logname := helpers.TimeNowInTimezone().Format("2006-01-02.log")
-		filename = strings.ReplaceAll(filename, "logs.log", logname)
+		// 使用按日期自动切换的写入器
+		dailyWriter := newDailyRotateWriter(filename, maxSize, maxBackup, maxAge, compress)
+		fileWriter = dailyWriter
+	} else {
+		// 单文件模式，使用 lumberjack 滚动日志
+		lumberJackLogger := &lumberjack.Logger{
+			Filename:   filename,
+			MaxSize:    maxSize,
+			MaxBackups: maxBackup,
+			MaxAge:     maxAge,
+			Compress:   compress,
+		}
+		fileWriter = zapcore.AddSync(lumberJackLogger)
 	}
-	// 滚动日志，详见 config/log.go
-	lumberJackLogger := &lumberjack.Logger{
-		Filename:   filename,
-		MaxSize:    maxSize,
-		MaxBackups: maxBackup,
-		MaxAge:     maxAge,
-		Compress:   compress,
-	}
+
 	// 配置输出介质
 	if isLocal {
 		// 本地开发终端打印和记录文件
-		return zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), zapcore.AddSync(lumberJackLogger))
+		return zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), fileWriter)
 	} else {
 		// 生产环境只记录文件
-		return zapcore.AddSync(lumberJackLogger)
+		return fileWriter
 	}
 }
 
