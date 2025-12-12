@@ -472,11 +472,11 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 	connectCtx, cancel := context.WithTimeout(ctx, time.Duration(launchInfo.LaunchTimeout)*time.Millisecond)
 	defer cancel()
 
-	logger.Debug("连接前...", zap.Any("command", cmd), zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond))
+	logger.Info("连接前...", zap.Any("command", cmd), zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond))
 	startTime := time.Now()
 	session, err1 := client.Connect(connectCtx, &mcp.CommandTransport{Command: cmd}, nil)
 	duration := time.Since(startTime)
-	logger.Debug("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
+	logger.Info("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
 
 	if err1 != nil {
 		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
