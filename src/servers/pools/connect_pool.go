@@ -552,7 +552,7 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 		//创建连接
 		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
 		if err1 != nil {
-			logger.Error("创建http实例连接失败", zap.Error(err1))
+			logger.Error("创建http实例连接失败", zap.String("ServiceName", service.ServiceName), zap.Error(err1))
 			continue
 		}
 		instance.Connections = append(instance.Connections, connection)
