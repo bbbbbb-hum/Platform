@@ -37,11 +37,9 @@ func (m *AeMcpServices) GetOne(id int32) error {
 	db := GetDB()
 	return db.Where("id = ?", id).First(m).Error
 }
-func (m *AeMcpServices) GetList(serverGroup int64) (err error, list []*AeMcpServices) {
+func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
 	db = db.Where("is_created = ?", true)
-	// 关掉分组启动，等需要的时候打开
-	//db = db.Where("created_group = ?", serverGroup)
 	err = db.Find(&list).Error
 	return
 }
