@@ -33,11 +33,14 @@ if ! kill -0 "$PID" 2>/dev/null; then
     echo "已清理PID文件"
     exit 0
 fi
+PGID=$(ps -o pgid= -p "$PID"|tr -d ' ')
 
-echo "正在停止服务进程 $PID..."
+echo "正在停止服务进程 $PID(进程组$PGID)..."
 
 # 优雅停止
-kill -TERM "$PID"
+#kill -TERM "$PID"
+pkill -TERM -g "$PGID"
+
 
 # 等待进程优雅退出（最多60秒）
 echo "等待进程优雅退出（包括清理子进程）..."
