@@ -425,7 +425,7 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 			}
 			connection, err1 := c.createStdioConnection(ctx, service.LaunchInfo, service.Id, int32(i))
 			if err1 != nil {
-				logger.Error("创建实例失败", zap.Int("index", i), zap.Error(err1))
+				logger.Error("创建实例失败", zap.Any("ServiceName", service.ServiceName), zap.Int("index", i), zap.Error(err1))
 				continue
 			}
 			instance.Connections = append(instance.Connections, connection)
