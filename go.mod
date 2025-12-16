@@ -6,6 +6,7 @@ require (
 	github.com/google/jsonschema-go v0.2.1-0.20250825175020-748c325cec76
 	github.com/lib/pq v1.10.9
 	github.com/modelcontextprotocol/go-sdk v0.4.0
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/cast v1.5.1
 	github.com/spf13/viper v1.16.0
