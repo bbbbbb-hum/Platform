@@ -2,14 +2,10 @@ package pools
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
-	"AgentEarth_AgentPlatform/src/models/config"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -128,18 +124,31 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 	}
 
 	// 加载账号配置
-	//service, err = c.loadAccountConfigs(service)
-	//if err != nil {
-	//	return err
-	//}
+	service, err = c.loadAccountConfigs(service)
+	if err != nil {
+		return err
+	}
 
 	// 创建实例信息
 	switch service.Type {
 	case "sse":
+		// 判断是否需要起本地服务（仅当配置了 command）
+		if service.LaunchInfo != nil && strings.TrimSpace(service.LaunchInfo.Command) != "" {
+			if err1 := c.startLocalService(ctx, service.LaunchInfo); err1 != nil {
+				return err1
+			}
+		}
 		service, err = c.createInstancesForSSE(ctx, service)
 	case "stdio":
 		service, err = c.createInstancesForStdio(ctx, service)
 	case "httpStreamable":
+		//判断是否需要起本地服务
+		if service.LaunchInfo != nil && strings.TrimSpace(service.LaunchInfo.Command) != "" {
+			// 启动本地服务
+			if err1 := c.startLocalService(ctx, service.LaunchInfo); err1 != nil {
+				return err1
+			}
+		}
 		service, err = c.createInstancesForHttpStreamable(ctx, service)
 	default:
 		err = fmt.Errorf("该类型暂不支持！")
@@ -179,419 +188,6 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 		zap.Int("账号数量", len(service.Accounts)),
 		zap.Int("工具数量", len(service.Tools)))
 	return nil
-}
-
-// 加载服务配置
-func (c *ConnectionPool) loadServiceConfigs(externalServiceId string) (service *ExternalService, err error) {
-	logger.Info("加载外部服务配置...", zap.String("external_service_id", externalServiceId))
-	externalServiceConfigModel := config.AeMcpExternalServicesConfig{}
-	err = externalServiceConfigModel.GetOneByExternalServiceId(externalServiceId)
-	if err != nil {
-		logger.Error("获取外部服务配置失败", zap.String("external_service_id", externalServiceId), zap.Error(err))
-	}
-	// 解析JSONB启动配置信息
-	var launchInfo LaunchInfo
-	launchInfoByte, err := json.Marshal(externalServiceConfigModel.LaunchInfo)
-	if err != nil {
-		err = fmt.Errorf("解析连接配置失败: %v", err)
-		return
-	}
-	err = json.Unmarshal(launchInfoByte, &launchInfo)
-	if err != nil {
-		err = fmt.Errorf("解析连接配置失败: %v", err)
-		return
-	}
-	// 解析JSONB连接配置信息
-	var connectInfo ConnectInfo
-	connectInfoByte, err := json.Marshal(externalServiceConfigModel.ConnectInfo)
-	if err != nil {
-		err = fmt.Errorf("解析连接配置失败: %v", err)
-		return
-	}
-	err = json.Unmarshal(connectInfoByte, &connectInfo)
-	if err != nil {
-		err = fmt.Errorf("解析连接配置失败: %v", err)
-		return
-	}
-	service = &ExternalService{
-		Id:                externalServiceConfigModel.Id,
-		ExternalServiceId: externalServiceConfigModel.ExternalServiceId,
-		Type:              externalServiceConfigModel.Type,
-		ServiceName:       externalServiceConfigModel.Name,
-		MaxInstance:       externalServiceConfigModel.MaxInstance,
-		Tools:             nil,
-		LaunchInfo:        &launchInfo,
-		ConnectInfo:       &connectInfo,
-		Accounts:          nil,
-		InstanceMap:       make(map[string]*ServiceInstance),
-	}
-	return
-}
-
-// 加载账号信息
-func (c *ConnectionPool) loadAccountConfigs(service *ExternalService) (*ExternalService, error) {
-	// 从数据库加载账号配置
-	if service.ConnectInfo.Headers != nil {
-		var accountModel = config.AeMcpExternalServicesAccount{}
-		accounts, err := accountModel.GetListByConfigId(service.Id)
-		if err != nil {
-			return service, fmt.Errorf("加载账号配置失败: %v", err)
-		}
-		if len(accounts) == 0 {
-			return service, fmt.Errorf("没有可用账号配置")
-		}
-
-		// 初始化 Accounts 切片
-		service.Accounts = make([]*ExternalAccount, len(accounts))
-
-		for i, account := range accounts {
-			var authInfo map[string]string
-			err = account.AuthInfo.Scan(&authInfo)
-			if err != nil {
-				return service, fmt.Errorf("解析 id=%d 账号配置失败: %v", account.Id, err)
-			}
-			var externalAccount = &ExternalAccount{
-				AccountID: account.ConfigId,
-				AuthInfo:  authInfo,
-			}
-			service.Accounts[i] = externalAccount
-		}
-	}
-	return service, nil
-}
-
-// 按SSE配置创建实例信息
-func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *ExternalService) (newService *ExternalService, err error) {
-	newService = service
-	if service.ConnectInfo.Headers != nil {
-		//需要鉴权
-		// 准备认证头
-		for i, account := range service.Accounts {
-			if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
-				// 创建连接配置副本，避免修改原始配置
-				connectInfoCopy := *service.ConnectInfo
-				connectInfoCopy.Headers = make(map[string]string)
-
-				// 合并原始headers和认证信息
-				for k, v := range service.ConnectInfo.Headers {
-					connectInfoCopy.Headers[k] = v
-				}
-				for k, v := range account.AuthInfo {
-					connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
-				}
-
-				//按当前账号信息创建实例
-				instance := &ServiceInstance{
-					AccountId:           account.AccountID,
-					InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
-					Connections:         make([]*ExternalConnection, 0),
-					ResolvedConnectInfo: &connectInfoCopy,
-					TargetConnections:   service.ConnectInfo.MaxConnect,
-				}
-				//创建连接
-				instance.Connections, err = c.createSSEConnections(ctx, &connectInfoCopy, service.Id, account.AccountID, service.ConnectInfo.MaxConnect)
-				if err != nil {
-					logger.Error("创建实例连接失败", zap.Error(err))
-					continue
-				}
-				newService.InstanceMap[instance.InstanceId] = instance
-			}
-		}
-	} else {
-		//无需鉴权
-		for i := 0; i < int(service.MaxInstance); i++ {
-			instance := &ServiceInstance{
-				AccountId:           int32(i),
-				InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
-				Connections:         make([]*ExternalConnection, 0),
-				ResolvedConnectInfo: service.ConnectInfo,
-				TargetConnections:   service.ConnectInfo.MaxConnect,
-			}
-			//创建连接
-			instance.Connections, err = c.createSSEConnections(ctx, service.ConnectInfo, service.Id, int32(i), service.ConnectInfo.MaxConnect)
-			if err != nil {
-				logger.Error("创建实例连接失败", zap.Error(err))
-				continue
-			}
-			newService.InstanceMap[instance.InstanceId] = instance
-		}
-	}
-
-	return
-}
-
-// 创建SSE连接
-func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32, connectsNum int) (connections []*ExternalConnection, err error) {
-	logger.Info("创建SSE连接...")
-
-	// 创建HTTP客户端
-	httpClient := &http.Client{
-		Transport: &headerTransport{
-			Transport: http.DefaultTransport,
-			Headers:   connectInfo.Headers,
-		},
-	}
-	// 创建MCP传输
-	transport := mcp.NewSSEClientTransport(connectInfo.Url, &mcp.SSEClientTransportOptions{
-		HTTPClient: httpClient,
-	})
-
-	// 创建MCP客户端
-	// 配置客户端选项，启用心跳
-	clientOpts := &mcp.ClientOptions{
-		KeepAlive: 30 * time.Second, // 每30秒发送一次心跳
-		// 心跳超时时间，建议为心跳间隔的2倍
-	}
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "AgentEarth-Proxy-SSE",
-		Version: "v1.0.0",
-	}, clientOpts)
-
-	// 创建多个连接
-	successCount := 0
-	for i := 0; i < connectsNum; i++ {
-		session, err1 := client.Connect(ctx, transport, nil)
-
-		if err1 != nil {
-			logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
-			continue
-		}
-
-		connection := &ExternalConnection{
-			ConnectionID: fmt.Sprintf("connection_%d_%d_%d", sid, aid, i),
-			Session:      session,
-			LastPing:     time.Now(),
-			ActiveUsers:  0,
-		}
-
-		connections = append(connections, connection)
-		successCount++
-	}
-
-	if successCount == 0 {
-		return nil, fmt.Errorf("所有连接都失败了")
-	}
-
-	logger.Info("账号连接创建完成",
-		zap.Int("account_id", int(aid)),
-		zap.Int("成功连接数", successCount),
-		zap.Int("期望连接数", connectInfo.MaxConnect))
-
-	return
-}
-
-// 按STDIO配置创建实例
-// 因为stdio启动一次就会创建一个进程，而一个进程只能保持一个连接
-func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *ExternalService) (newService *ExternalService, err error) {
-	// 按STDIO配置启动服务
-	if len(service.Accounts) > 0 {
-		// 需要鉴权
-		for i, account := range service.Accounts {
-			if account.AuthInfo != nil && len(service.InstanceMap) < int(service.MaxInstance) {
-				// 创建连接配置副本，避免修改原始配置
-				launchInfoCopy := *service.LaunchInfo
-				launchInfoCopy.Env = make(map[string]interface{})
-
-				// 添加认证信息
-				for k, v := range account.AuthInfo {
-					launchInfoCopy.Env[k] = v
-				}
-				instance := &ServiceInstance{
-					AccountId:          account.AccountID,
-					InstanceId:         fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i), // 实例ID 使用格式 instance_服务ID_账号ID_实例数量索引
-					Connections:        []*ExternalConnection{},
-					ResolvedLaunchInfo: &launchInfoCopy,
-					TargetConnections:  1,
-				}
-				// 按当前账号信息创建实例
-				connection, err1 := c.createStdioConnection(ctx, &launchInfoCopy, service.Id, account.AccountID)
-				if err1 != nil {
-					logger.Error("创建实例失败", zap.Int("index", i), zap.Error(err1))
-					continue
-				}
-				instance.Connections = append(instance.Connections, connection)
-				service.InstanceMap[instance.InstanceId] = instance
-			}
-		}
-	} else {
-		// 无需鉴权
-		for i := 0; i < int(service.MaxInstance); i++ {
-			instance := &ServiceInstance{
-				AccountId:          int32(i),
-				InstanceId:         fmt.Sprintf("instance_%d_%d", service.Id, i), // 实例ID 使用格式 instance_服务ID_实例数量索引
-				Connections:        []*ExternalConnection{},
-				ResolvedLaunchInfo: service.LaunchInfo,
-				TargetConnections:  1,
-			}
-			connection, err1 := c.createStdioConnection(ctx, service.LaunchInfo, service.Id, int32(i))
-			if err1 != nil {
-				logger.Error("创建实例失败", zap.Any("ServiceName", service.ServiceName), zap.Int("index", i), zap.Error(err1))
-				continue
-			}
-			instance.Connections = append(instance.Connections, connection)
-			service.InstanceMap[instance.InstanceId] = instance
-		}
-	}
-	newService = service
-
-	return
-}
-
-// 创建stdio连接
-func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *LaunchInfo, sid, aid int32) (connection *ExternalConnection, err error) {
-	logger.Debug("创建stdio连接...")
-	cmd := exec.Command(launchInfo.Command, launchInfo.Args...)
-
-	if len(launchInfo.Env) > 0 {
-		// 首先继承父进程的所有环境变量
-		cmd.Env = os.Environ()
-		// 然后添加自定义环境变量
-		for s, k := range launchInfo.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, k))
-		}
-		logger.Debug("环境变量设置完成",
-			zap.Int("total_env_vars", len(cmd.Env)),
-			zap.Int("custom_env_vars", len(launchInfo.Env)),
-			zap.Strings("custom_vars", func() []string {
-				var customs []string
-				for s, k := range launchInfo.Env {
-					customs = append(customs, fmt.Sprintf("%s=%s", s, k))
-				}
-				return customs
-			}()))
-	} else {
-		// 即使没有自定义环境变量，也要继承父进程环境变量
-		cmd.Env = os.Environ()
-	}
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "AgentEarth-Proxy-Stdio",
-		Version: "v1.0.0",
-	}, nil)
-
-	// 创建带超时的context，100秒后自动取消
-	connectCtx, cancel := context.WithTimeout(ctx, time.Duration(launchInfo.LaunchTimeout)*time.Millisecond)
-	defer cancel()
-
-	logger.Info("连接前...", zap.Any("command", cmd), zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond))
-	startTime := time.Now()
-	session, err1 := client.Connect(connectCtx, &mcp.CommandTransport{Command: cmd}, nil)
-	duration := time.Since(startTime)
-	logger.Info("连接后...", zap.Any("session", session), zap.Duration("duration", duration))
-
-	if err1 != nil {
-		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
-			logger.Error("连接超时，已中断cmd命令执行",
-				zap.Error(err1),
-				zap.Int32("aid", aid),
-				zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond),
-				zap.Duration("elapsed", duration))
-		} else {
-			logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
-		}
-		err = err1
-		return
-	}
-
-	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d", sid, aid),
-		Session:      session,
-		LastPing:     time.Now(),
-		ActiveUsers:  0,
-	}
-	return
-}
-
-// 按httpStreamable创建实例
-func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, service *ExternalService) (newService *ExternalService, err error) {
-	newService = service
-	//if service.ConnectInfo.Headers != nil {
-	//	//需要鉴权
-	//	// 准备认证头
-	//	for i, account := range service.Accounts {
-	//		if account.AuthInfo != nil && len(newService.InstanceMap) < int(service.MaxInstance) {
-	//			// 创建连接配置副本，避免修改原始配置
-	//			connectInfoCopy := *service.ConnectInfo
-	//			connectInfoCopy.Headers = make(map[string]string)
-	//
-	//			// 合并原始headers和认证信息
-	//			for k, v := range service.ConnectInfo.Headers {
-	//				connectInfoCopy.Headers[k] = v
-	//			}
-	//			for k, v := range account.AuthInfo {
-	//				connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
-	//			}
-	//
-	//			//按当前账号信息创建实例
-	//			instance := &ServiceInstance{
-	//				AccountId:           account.AccountID,
-	//				InstanceId:          fmt.Sprintf("instance_%d_%d_%d", service.Id, account.AccountID, i),
-	//				Connections:         make([]*ExternalConnection, 0),
-	//				ResolvedConnectInfo: &connectInfoCopy,
-	//				TargetConnections:   1,
-	//			}
-	//			//创建连接
-	//			connection, err1 := c.createHttpStreamableConnections(ctx, &connectInfoCopy, service.Id, account.AccountID)
-	//			if err1 != nil {
-	//				logger.Error("创建http实例连接失败", zap.Error(err1))
-	//				continue
-	//			}
-	//			instance.Connections = append(instance.Connections, connection)
-	//			newService.InstanceMap[instance.InstanceId] = instance
-	//		}
-	//	}
-	//} else {
-	//无需鉴权
-	for i := 0; i < int(service.MaxInstance); i++ {
-		instance := &ServiceInstance{
-			AccountId:           int32(i),
-			InstanceId:          fmt.Sprintf("instance_%d_%d", service.Id, i),
-			Connections:         make([]*ExternalConnection, 0),
-			ResolvedConnectInfo: service.ConnectInfo,
-			TargetConnections:   1,
-		}
-		//创建连接
-		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, int32(i))
-		if err1 != nil {
-			logger.Error("创建http实例连接失败", zap.String("ServiceName", service.ServiceName), zap.Error(err1))
-			continue
-		}
-		instance.Connections = append(instance.Connections, connection)
-		newService.InstanceMap[instance.InstanceId] = instance
-	}
-	//}
-	return
-}
-
-// 创建httpStreamable连接
-func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connection *ExternalConnection, err error) {
-	logger.Info("创建HTTP连接...")
-	// 创建HTTP客户端
-	httpClient := &http.Client{
-		Transport: &headerTransport{
-			Transport: http.DefaultTransport,
-			Headers:   connectInfo.Headers,
-		},
-	}
-	// 创建MCP传输
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "time-client",
-		Version: "1.0.0",
-	}, nil)
-	// Connect to the server.
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
-		Endpoint:   connectInfo.Url,
-		HTTPClient: httpClient,
-	}, nil)
-	if err != nil {
-		logger.Error("Failed to connect", zap.Error(err))
-	}
-	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d", sid, aid),
-		Session:      session,
-		LastPing:     time.Now(),
-		ActiveUsers:  0,
-	}
-	return
 }
 
 // 获取工具
@@ -778,7 +374,7 @@ func (c *ConnectionPool) maintainOnce() {
 		services = append(services, s)
 	}
 	c.mutex.RUnlock()
-	logger.Debug("检查连接状态...")
+	logger.Info("检查连接状态...")
 	for _, svc := range services {
 		// 遍历所有实例
 		for _, inst := range svc.InstanceMap {
@@ -822,7 +418,7 @@ func (c *ConnectionPool) maintainOnce() {
 				// 创建新连接（锁外创建）
 				newConn, err := c.createReplacementConnection(svc, inst, current)
 				if err != nil {
-					logger.Warn("维护补齐连接失败", zap.String("service", svc.ServiceName), zap.Error(err))
+					logger.Warn("维护补齐连接失败", zap.String("service_name", svc.ServiceName), zap.Error(err))
 					break // 避免紧急重试风暴，留给下次周期
 				}
 
@@ -887,13 +483,31 @@ func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, inst 
 // buildConnectInfoForInstance 合并服务默认 Header 与账号认证信息
 func (c *ConnectionPool) buildConnectInfoForInstance(svc *ExternalService, inst *ServiceInstance) *ConnectInfo {
 	ciCopy := *svc.ConnectInfo
-	ciCopy.Headers = make(map[string]string)
-	for k, v := range svc.ConnectInfo.Headers {
-		ciCopy.Headers[k] = v
-	}
-	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil {
-		for k, v := range acct.AuthInfo {
+
+	// 复制 headers 模板（可能为 nil）
+	if svc.ConnectInfo.Headers != nil {
+		ciCopy.Headers = make(map[string]string, len(svc.ConnectInfo.Headers))
+		for k, v := range svc.ConnectInfo.Headers {
 			ciCopy.Headers[k] = v
+		}
+	} else {
+		ciCopy.Headers = nil
+	}
+
+	// 按账号做 URL/header 替换与合并（逻辑与实例创建一致）
+	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil && acct.AuthInfo != nil {
+		// URL query 参数占位符替换：$(keyX)=$(VALUE) -> keyX=auth[keyX]
+		ciCopy.Url = replaceURLAuthPlaceholders(ciCopy.Url, acct.AuthInfo)
+
+		// headers：如果模板里存在占位符，走模板替换；否则用 AuthInfo 覆盖合并
+		if ciCopy.Headers != nil {
+			if headersContainAuthPlaceholders(ciCopy.Headers) {
+				ciCopy.Headers = replaceHeaderAuthPlaceholders(ciCopy.Headers, acct.AuthInfo)
+			} else {
+				for k, v := range acct.AuthInfo {
+					ciCopy.Headers[k] = v
+				}
+			}
 		}
 	}
 	return &ciCopy
@@ -902,13 +516,28 @@ func (c *ConnectionPool) buildConnectInfoForInstance(svc *ExternalService, inst 
 // buildLaunchInfoForInstance 合并进程环境变量与账号认证信息
 func (c *ConnectionPool) buildLaunchInfoForInstance(svc *ExternalService, inst *ServiceInstance) *LaunchInfo {
 	liCopy := *svc.LaunchInfo
-	liCopy.Env = make(map[string]interface{})
-	for k, v := range svc.LaunchInfo.Env {
-		liCopy.Env[k] = v
-	}
-	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil {
-		for k, v := range acct.AuthInfo {
+
+	// 复制 env 模板（可能为 nil）
+	if svc.LaunchInfo.Env != nil {
+		liCopy.Env = make(map[string]interface{}, len(svc.LaunchInfo.Env))
+		for k, v := range svc.LaunchInfo.Env {
 			liCopy.Env[k] = v
+		}
+	} else {
+		liCopy.Env = nil
+	}
+
+	// 按账号做 Env 替换与合并（逻辑与实例创建一致）
+	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil && acct.AuthInfo != nil {
+		if envContainAuthPlaceholders(liCopy.Env) {
+			liCopy.Env = replaceEnvAuthPlaceholders(liCopy.Env, acct.AuthInfo)
+		} else {
+			if liCopy.Env == nil {
+				liCopy.Env = make(map[string]interface{})
+			}
+			for k, v := range acct.AuthInfo {
+				liCopy.Env[k] = v
+			}
 		}
 	}
 	return &liCopy
