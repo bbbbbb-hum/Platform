@@ -61,22 +61,6 @@ func main() {
 	pools.GetRequestLogsPool().Start(60 * time.Second)
 
 	// 初始化 mcp 服务
-	//test1Server := server.NewServer()
-	//sseHandler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
-	//	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	//	var serverID string
-	//
-	//	// 检查路径格式：/mcp-server/{server_id}/sse
-	//	if len(pathParts) >= 3 && pathParts[0] == "mcp-server" && pathParts[2] == "sse" {
-	//		serverID = pathParts[1]
-	//	}
-	//
-	//	mcpServer, ok := servers.McpServicesMap[serverID]
-	//	if !ok {
-	//		return nil
-	//	}
-	//	return mcpServer.GetServer()
-	//})
 	httpStreamableHandler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
 		path := request.URL.Path
 		pathParts := strings.Split(strings.Trim(path, "/"), "/")
