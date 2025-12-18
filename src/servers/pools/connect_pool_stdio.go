@@ -40,10 +40,10 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 					launchInfoCopy.Env = replaceEnvAuthPlaceholders(launchInfoCopy.Env, account.AuthInfo)
 				} else {
 					if launchInfoCopy.Env == nil {
-				launchInfoCopy.Env = make(map[string]interface{})
+						launchInfoCopy.Env = make(map[string]interface{})
 					}
-				for k, v := range account.AuthInfo {
-					launchInfoCopy.Env[k] = v
+					for k, v := range account.AuthInfo {
+						launchInfoCopy.Env[k] = v
 					}
 				}
 				instance := &ServiceInstance{
@@ -56,7 +56,7 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 				// 按当前账号信息创建实例
 				connection, err1 := c.createStdioConnection(ctx, &launchInfoCopy, service.Id, account.AccountID)
 				if err1 != nil {
-					logger.Error("创建实例失败", zap.Int("index", i), zap.Error(err1))
+					logger.Error("创建stdio实例失败", zap.Any("ServiceName", service.ServiceName), zap.Int("index", i), zap.Error(err1))
 					continue
 				}
 				instance.Connections = append(instance.Connections, connection)
@@ -75,7 +75,7 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 			}
 			connection, err1 := c.createStdioConnection(ctx, service.LaunchInfo, service.Id, int32(i))
 			if err1 != nil {
-				logger.Error("创建实例失败", zap.Any("ServiceName", service.ServiceName), zap.Int("index", i), zap.Error(err1))
+				logger.Error("创建stdio实例失败", zap.Any("ServiceName", service.ServiceName), zap.Int("index", i), zap.Error(err1))
 				continue
 			}
 			instance.Connections = append(instance.Connections, connection)
@@ -131,12 +131,13 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 	if err1 != nil {
 		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
 			logger.Error("连接超时，已中断cmd命令执行",
-				zap.Error(err1),
 				zap.Int32("aid", aid),
+				zap.Any("command", cmd),
 				zap.Duration("timeout", time.Duration(launchInfo.LaunchTimeout)*time.Millisecond),
-				zap.Duration("elapsed", duration))
+				zap.Duration("elapsed", duration),
+				zap.Error(err1))
 		} else {
-			logger.Error("创建连接失败", zap.Error(err1), zap.Int32("aid", aid))
+			logger.Error("创建stdio连接失败", zap.Int32("aid", aid), zap.Any("command", cmd), zap.Error(err1))
 		}
 		err = err1
 		return

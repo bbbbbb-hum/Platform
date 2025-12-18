@@ -58,7 +58,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 				//创建连接
 				instance.Connections, err = c.createSSEConnections(ctx, &connectInfoCopy, service.Id, account.AccountID, service.ConnectInfo.MaxConnect)
 				if err != nil {
-					logger.Error("创建实例连接失败", zap.Error(err))
+					logger.Error("创建实例连接失败", zap.String("service_name", service.ServiceName), zap.Error(err))
 					continue
 				}
 				newService.InstanceMap[instance.InstanceId] = instance
@@ -77,7 +77,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 			//创建连接
 			instance.Connections, err = c.createSSEConnections(ctx, service.ConnectInfo, service.Id, int32(i), service.ConnectInfo.MaxConnect)
 			if err != nil {
-				logger.Error("创建实例连接失败", zap.Error(err))
+				logger.Error("创建实例连接失败", zap.String("service_name", service.ServiceName), zap.Error(err))
 				continue
 			}
 			newService.InstanceMap[instance.InstanceId] = instance
@@ -89,7 +89,7 @@ func (c *ConnectionPool) createInstancesForSSE(ctx context.Context, service *Ext
 
 // 创建SSE连接
 func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32, connectsNum int) (connections []*ExternalConnection, err error) {
-	logger.Info("创建SSE连接...")
+	logger.Info("创建SSE连接...", zap.String("connect_url", connectInfo.Url))
 
 	// 创建HTTP客户端
 	httpClient := &http.Client{
@@ -121,7 +121,7 @@ func (c *ConnectionPool) createSSEConnections(ctx context.Context, connectInfo *
 		session, err1 := client.Connect(ctx, transport, nil)
 
 		if err1 != nil {
-			logger.Error("创建连接失败", zap.Error(err1), zap.Int("index", i))
+			logger.Error("创建连接失败", zap.Int("index", i), zap.String("connect_url", connectInfo.Url), zap.Error(err1))
 			continue
 		}
 
