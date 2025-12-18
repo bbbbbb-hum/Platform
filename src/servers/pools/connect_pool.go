@@ -487,9 +487,9 @@ func (c *ConnectionPool) buildConnectInfoForInstance(svc *ExternalService, inst 
 	// 复制 headers 模板（可能为 nil）
 	if svc.ConnectInfo.Headers != nil {
 		ciCopy.Headers = make(map[string]string, len(svc.ConnectInfo.Headers))
-		for k, v := range svc.ConnectInfo.Headers {
-			ciCopy.Headers[k] = v
-		}
+	for k, v := range svc.ConnectInfo.Headers {
+		ciCopy.Headers[k] = v
+	}
 	} else {
 		ciCopy.Headers = nil
 	}
@@ -504,8 +504,8 @@ func (c *ConnectionPool) buildConnectInfoForInstance(svc *ExternalService, inst 
 			if headersContainAuthPlaceholders(ciCopy.Headers) {
 				ciCopy.Headers = replaceHeaderAuthPlaceholders(ciCopy.Headers, acct.AuthInfo)
 			} else {
-				for k, v := range acct.AuthInfo {
-					ciCopy.Headers[k] = v
+		for k, v := range acct.AuthInfo {
+			ciCopy.Headers[k] = v
 				}
 			}
 		}
@@ -520,9 +520,9 @@ func (c *ConnectionPool) buildLaunchInfoForInstance(svc *ExternalService, inst *
 	// 复制 env 模板（可能为 nil）
 	if svc.LaunchInfo.Env != nil {
 		liCopy.Env = make(map[string]interface{}, len(svc.LaunchInfo.Env))
-		for k, v := range svc.LaunchInfo.Env {
-			liCopy.Env[k] = v
-		}
+	for k, v := range svc.LaunchInfo.Env {
+		liCopy.Env[k] = v
+	}
 	} else {
 		liCopy.Env = nil
 	}
@@ -535,8 +535,8 @@ func (c *ConnectionPool) buildLaunchInfoForInstance(svc *ExternalService, inst *
 			if liCopy.Env == nil {
 				liCopy.Env = make(map[string]interface{})
 			}
-			for k, v := range acct.AuthInfo {
-				liCopy.Env[k] = v
+		for k, v := range acct.AuthInfo {
+			liCopy.Env[k] = v
 			}
 		}
 	}

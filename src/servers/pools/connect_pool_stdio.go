@@ -40,10 +40,10 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 					launchInfoCopy.Env = replaceEnvAuthPlaceholders(launchInfoCopy.Env, account.AuthInfo)
 				} else {
 					if launchInfoCopy.Env == nil {
-						launchInfoCopy.Env = make(map[string]interface{})
+				launchInfoCopy.Env = make(map[string]interface{})
 					}
-					for k, v := range account.AuthInfo {
-						launchInfoCopy.Env[k] = v
+				for k, v := range account.AuthInfo {
+					launchInfoCopy.Env[k] = v
 					}
 				}
 				instance := &ServiceInstance{

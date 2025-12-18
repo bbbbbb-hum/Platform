@@ -73,10 +73,10 @@ func (c *ConnectionPool) loadAccountConfigs(service *ExternalService) (*External
 
 	service.Accounts = make([]*ExternalAccount, len(accounts))
 	for i, account := range accounts {
-		var authInfo map[string]string
-		err = account.AuthInfo.Scan(&authInfo)
-		if err != nil {
-			return service, fmt.Errorf("解析 id=%d 账号配置失败: %v", account.Id, err)
+		// account.AuthInfo 是 gorm datatypes.JSONMap（map[string]any），这里直接转换为 map[string]string
+		authInfo := make(map[string]string, len(account.AuthInfo))
+		for k, v := range account.AuthInfo {
+			authInfo[k] = fmt.Sprint(v)
 		}
 		service.Accounts[i] = &ExternalAccount{
 			AccountID: account.ConfigId,

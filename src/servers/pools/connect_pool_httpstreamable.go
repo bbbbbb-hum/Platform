@@ -27,22 +27,22 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 
 				// headers 合并逻辑先保持原样；若原始 headers 为空，则保持 nil
 				if service.ConnectInfo.Headers != nil {
-					connectInfoCopy.Headers = make(map[string]string)
+				connectInfoCopy.Headers = make(map[string]string)
 				} else {
 					connectInfoCopy.Headers = nil
 				}
 
 				// 合并原始headers和认证信息
 				if service.ConnectInfo.Headers != nil {
-					for k, v := range service.ConnectInfo.Headers {
-						connectInfoCopy.Headers[k] = v
-					}
+				for k, v := range service.ConnectInfo.Headers {
+					connectInfoCopy.Headers[k] = v
+				}
 					// 如果 headers 里配置了占位符，则按“模板替换”模式处理
 					if headersContainAuthPlaceholders(connectInfoCopy.Headers) {
 						connectInfoCopy.Headers = replaceHeaderAuthPlaceholders(connectInfoCopy.Headers, account.AuthInfo)
 					} else {
-						for k, v := range account.AuthInfo {
-							connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
+				for k, v := range account.AuthInfo {
+					connectInfoCopy.Headers[k] = v // 认证信息覆盖默认headers
 						}
 					}
 				}
