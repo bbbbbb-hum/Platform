@@ -61,22 +61,22 @@ func main() {
 	pools.GetRequestLogsPool().Start(60 * time.Second)
 
 	// 初始化 mcp 服务
-	//test1Server := server.NewServer()
-	sseHandler := mcp.NewSSEHandler(func(r *http.Request) *mcp.Server {
-		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		var serverID string
+	httpStreamableHandler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
+		path := request.URL.Path
+		pathParts := strings.Split(strings.Trim(path, "/"), "/")
 
-		// 检查路径格式：/mcp-server/{server_id}/sse
-		if len(pathParts) >= 3 && pathParts[0] == "mcp-server" && pathParts[2] == "sse" {
+		var serverID string
+		// 新路径定义：/mcp-server/{server_id}
+		if len(pathParts) >= 2 && pathParts[0] == "mcp-server" {
 			serverID = pathParts[1]
 		}
 
 		mcpServer, ok := servers.McpServicesMap[serverID]
-		if !ok {
+		if !ok || mcpServer == nil || mcpServer.GetServer() == nil {
 			return nil
 		}
 		return mcpServer.GetServer()
-	})
+	}, nil)
 	// 增加权限校验
 	authMiddleware := middleware.NewAuth()
 	// 设置路由
@@ -110,12 +110,11 @@ func main() {
 				return
 			}
 			w.Write([]byte("MCP服务初始化完成"))
-			return
 		})
 	}
 
-	// 使用 Prometheus 中间件包装（先包装 SSE Handler，再添加认证，最后添加指标收集）
-	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(sseHandler.ServeHTTP))
+	// 使用 Prometheus 中间件包装（先包装 Handler，再添加认证，最后添加指标收集）
+	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(httpStreamableHandler.ServeHTTP))
 	mux.Handle("/mcp-server/", mcpHandler)
 
 	// 创建 HTTP 服务器
