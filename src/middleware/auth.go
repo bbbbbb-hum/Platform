@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
 	"AgentEarth_AgentPlatform/src/models/users"
 	"fmt"
 	"net/http"
@@ -18,11 +19,53 @@ type AuthMiddleware struct {
 	cacheMu  sync.RWMutex
 	cache    map[string]apiKeyCacheEntry
 	cacheTTL time.Duration
+
+	userMu   sync.RWMutex
+	userInfo map[string]userInfoCacheEntry // key: apiKey
+
+	usageMu        sync.Mutex
+	usage          map[string]map[string]map[string]*usageDayBucket // userID -> serverID -> yyyymmdd -> bucket
+	usageFlushStop chan struct{}
+	usageFlushWG   sync.WaitGroup
 }
 
 type apiKeyCacheEntry struct {
 	valid     bool
 	expiresAt time.Time
+}
+
+type userInfoCacheEntry struct {
+	userID    string
+	keyID     int32
+	expiresAt time.Time
+}
+
+type usageCounter struct {
+	userID   string
+	keyID    int32
+	serverID string
+	year     int16
+	month    int16
+	day      int16
+
+	calls int64
+	dirty int64
+}
+
+// usageDayBucket holds per-user aggregation for enforcing user-level limits over a time period
+// (day/week/month/quarter/year), while still keeping per-key-per-day counters for DB upsert
+// (logs table is keyed by key_id + day).
+type usageDayBucket struct {
+	limitType     int
+	periodKey     string
+	periodStart   time.Time
+	periodEndExcl time.Time
+
+	// calls is the total calls for this user+server+period (summed across all keys).
+	calls int64
+
+	// byKeyDay: keyID -> dayKey(yyyymmdd) -> counter
+	byKeyDay map[int32]map[string]*usageCounter
 }
 
 func NewAuth() *AuthMiddleware {
@@ -32,9 +75,14 @@ func NewAuth() *AuthMiddleware {
 		HeaderKey: helperConfig.GetString("server.auth_key"),
 	}
 	m.cache = make(map[string]apiKeyCacheEntry)
+	m.userInfo = make(map[string]userInfoCacheEntry)
+	m.usage = make(map[string]map[string]map[string]*usageDayBucket)
 	// 允许通过配置覆盖缓存 TTL（秒），未设置则默认 5 分钟
 	cacheTTLSeconds := helperConfig.GetInt("server.auth_cache_ttl")
 	m.cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
+
+	// 每 10 分钟同步一次用量到数据库
+	m.startUsageFlusher(10 * time.Minute)
 	return m
 }
 
@@ -54,6 +102,13 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		if !a.ValidateAPIKey(apiKey) {
 			logger.Error(fmt.Sprintf("Authentication failed for request %s %s", r.Method, r.URL.Path))
 			http.Error(w, "Unauthorized: Invalid API Key", http.StatusUnauthorized)
+			return
+		}
+
+		// 调用次数限制（先只做按天 CallsLimit）
+		serverID := helpers.ExtractServerID(r.URL.Path)
+		if serverID != "" && !a.checkCallsAndTokens(apiKey, serverID) {
+			http.Error(w, "Too Many Requests: Calls limit exceeded", http.StatusTooManyRequests)
 			return
 		}
 
@@ -99,6 +154,7 @@ func (a *AuthMiddleware) ValidateAPIKey(apiKey string) bool {
 
 	// 缓存写入
 	a.setCache(apiKey, true, a.cacheTTL)
+	a.setUserInfo(apiKey, userKeysModel.UserId, userKeysModel.Id, a.cacheTTL)
 
 	return true
 }
