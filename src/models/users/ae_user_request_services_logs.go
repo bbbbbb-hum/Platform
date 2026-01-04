@@ -50,19 +50,16 @@ func GetUserCallsSumByUSRange(userID, serverID string, startInclusive, endExclus
 	return sum, err
 }
 
-// AddUsageUpsert 按 (user_id, key_id, server_id, year, month, day) 维度 upsert + 累加 calls/tokens.
-// 依赖数据库上存在对应的唯一键/唯一索引，否则 on conflict 不会生效。
-func AddUsageUpsert(userID string, keyID int32, serverID string, year, month, day int16, callsDelta, tokensDelta int32) error {
-	if callsDelta == 0 && tokensDelta == 0 {
-		return nil
-	}
+// SetUsageUpsert performs an upsert that SETS absolute calls/tokens (not delta-add).
+// This is used for "full sync" flushing where the in-memory counter is treated as authoritative.
+func SetUsageUpsert(userID string, keyID int32, serverID string, year, month, day int16, callsAbs, tokensAbs int32) error {
 	now := time.Now()
 	row := &AeUserRequestServicesLogs{
 		UserId:     userID,
 		KeyId:      keyID,
 		ServerId:   serverID,
-		Calls:      callsDelta,
-		Tokens:     tokensDelta,
+		Calls:      callsAbs,
+		Tokens:     tokensAbs,
 		Year:       year,
 		Month:      month,
 		Day:        day,
@@ -71,7 +68,7 @@ func AddUsageUpsert(userID string, keyID int32, serverID string, year, month, da
 	}
 
 	db := models.GetDB()
-	err := db.Clauses(clause.OnConflict{
+	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "user_id"},
 			{Name: "key_id"},
@@ -81,13 +78,11 @@ func AddUsageUpsert(userID string, keyID int32, serverID string, year, month, da
 			{Name: "day"},
 		},
 		DoUpdates: clause.Assignments(map[string]any{
-			"calls":       clause.Expr{SQL: "calls + ?", Vars: []any{callsDelta}},
-			"tokens":      clause.Expr{SQL: "tokens + ?", Vars: []any{tokensDelta}},
+			"calls":       clause.Expr{SQL: "EXCLUDED.calls"},
+			"tokens":      clause.Expr{SQL: "EXCLUDED.tokens"},
 			"update_time": now,
 		}),
 	}).Create(row).Error
-
-	return err
 }
 
 // IsNotFound 判断 gorm 的 not found。

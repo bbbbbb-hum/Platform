@@ -19,11 +19,11 @@ var McpServicesMap = map[string]*Server{}
 var RequestLogs = map[string]*models.AeMcpServicesRequestLogs{}
 
 type Server struct {
+	ServerName    string
 	mcpServer     *mcp.Server
 	ChainInstance *task_chain.ChainInstance
 	toolDescList  []*types.ToolDesc
 	LimitCalls    int64 // 调用次数限制
-	LimitTokens   int64 // token限制
 	LimitType     int64 // 调用限制类型：1 天; 2 周；3 月；4 季度；5 年；
 }
 
@@ -91,7 +91,9 @@ func InitializeByServiceId(id int32) error {
 
 // 创建MCP服务实例
 func createMcpServer(service *models.AeMcpServices) *Server {
-	server := &Server{}
+	server := &Server{
+		ServerName: service.ServerName,
+	}
 
 	// 根据配置创建MCP服务器实例
 	implementation := &mcp.Implementation{
@@ -197,7 +199,6 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	}
 	server.LimitType = serviceLimitModel.LimitType
 	server.LimitCalls = serviceLimitModel.LimitCalls
-	server.LimitTokens = serviceLimitModel.LimitTokens
 	logger.Info("MCP服务器创建成功", zap.String("service_id", service.ServerId), zap.Int("tools_count", len(server.toolDescList)))
 
 	return server
