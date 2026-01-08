@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts (保留 dist/bin 用于 Docker 构建)
+dist/*
+!dist/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+storage/
+
+# Test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# Dependencies
+vendor/
+
+# Documentation (built separately)
+docs/
+*.md
+!README.md
+
+# CI/CD
+.gitlab-ci.yml
+.github/
+
+# Local dev files
+tmp/
+temp/
+*.tmp
+
+# Kubernetes configs (not needed in image)
+k8s/
+scripts/
+
+# Environment files
+.env*
+!config/.env
+

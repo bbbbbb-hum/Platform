@@ -21,9 +21,15 @@ GOOS := linux
 GOARCH := amd64
 
 # ========================
+# Docker image configuration
+# ========================
+DOCKER_IMAGE_NAME := ae-platform-api
+DOCKER_IMAGE_TAG := $(shell date '+%Y%m%d%H%M%S')
+
+# ========================
 # Phony targets
 # ========================
-.PHONY: all build cross-build test test-coverage coverage-html clean help
+.PHONY: all build cross-build test test-coverage coverage-html clean help docker-build docker-tag-latest
 
 # ========================
 # Default target
@@ -39,9 +45,7 @@ build:
 	@go build $(GO_BUILD_FLAGS) -o $(BINARY_PATH) $(MAIN_PACKAGE)
 	@echo
 	@mkdir -p $(CONFIG_DIR)
-	@cp ./config/.env "$(CONFIG_DIR)/"
-	@cp ./launch/*.sh "$(BINARY_DIR)/"
-	@chmod +x $(BINARY_DIR)/*.sh
+	@if [ -f ./config/agent_plat_form.yml ]; then cp ./config/agent_plat_form.yml "$(CONFIG_DIR)/"; else echo "[WARN] ./config/agent_plat_form.yml not found, skip copy"; fi
 	echo "Branch: ${CI_COMMIT_REF_NAME}, BuildNo: ${BUILD_NUMBER}, BuildTime: ${DATETIME}, CommitID: ${CI_COMMIT_ID}" > "./dist/v_${CI_COMMIT_REF_NAME}_${BUILD_NUMBER}_${DATETIME}_${CI_COMMIT_ID}.txt"
 	@echo "Build completed: $(BINARY_PATH)"
 
@@ -55,9 +59,7 @@ cross-build:
 	@if [ -n "$(MACHINE_NAME)" ]; then echo "  MACHINE_NAME: $(MACHINE_NAME)"; fi
 	@echo
 	@mkdir -p $(CONFIG_DIR)
-	@cp ./config/.env "$(CONFIG_DIR)/"
-	@cp ./launch/*.sh "$(BINARY_DIR)/"
-	@chmod +x $(BINARY_DIR)/*.sh
+	@if [ -f ./config/agent_plat_form.yml ]; then cp ./config/agent_plat_form.yml "$(CONFIG_DIR)/"; else echo "[WARN] ./config/agent_plat_form.yml not found, skip copy"; fi
 	@echo "Branch: ${CI_COMMIT_REF_NAME}, BuildNo: ${BUILD_NUMBER}, BuildTime: ${DATETIME}, CommitID: ${CI_COMMIT_ID}" > "./dist/v_${CI_COMMIT_REF_NAME}_${BUILD_NUMBER}_${DATETIME}_${CI_COMMIT_ID}.txt"
 	@echo "Build completed: $(BINARY_PATH)"
 
@@ -94,6 +96,17 @@ clean:
 	@echo "Clean completed"
 
 # ========================
+# Build docker image
+# ========================
+dockerimg:
+	@echo "======================================="
+	@echo "开始构建docker image..."
+	@echo "======================================="
+	@docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) -f Dockerfile .
+	@echo "[INFO] docker image构建完成: $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@echo "======================================="
+
+# ========================
 # Show help message
 # ========================
 help:
@@ -106,5 +119,7 @@ help:
 	@echo "  make test         - Run tests"
 	@echo "  make test-coverage - Run tests with coverage report"
 	@echo "  make coverage-html - Generate HTML coverage report"
+	@echo "  make docker-build - Build Docker image with timestamp tag"
+	@echo "  make dockerimg    - Build and tag Docker image as latest"
 	@echo "  make clean        - Remove build artifacts and coverage files"
 	@echo "  make help         - Show this help message"
