@@ -2,7 +2,7 @@
 ## Notes:
 ## - tzdata is required because code loads "Asia/Shanghai" via time.LoadLocation()
 ## - Node.js is required for aim-mcp (MCP service)
-## - aim-mcp is extracted from aim-mcp:latest Docker image (must exist locally)
+## - aim-mcp is extracted from aim-mcp:v1.0 Docker image (must exist locally)
 ## - config file is required; by default code reads ./config/.env.local relative to WORKDIR
 ##   (recommended: mount /opt/xlconfigs/AEPlatformAPI/.env.<env> and run args: --env=<env>)
 
@@ -14,7 +14,7 @@ ARG DOCKER_REP_PATH=""
 # ========================================
 # 阶段 1: 从本地 aim-mcp 镜像提取文件
 # ========================================
-FROM aim-mcp:latest AS aim-mcp-source
+FROM aim-mcp:v1.0 AS aim-mcp-source
 
 # ========================================
 # 阶段 2: 构建 ae-platform 运行时镜像

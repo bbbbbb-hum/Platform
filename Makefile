@@ -102,6 +102,20 @@ dockerimg:
 	@echo "======================================="
 	@echo "开始构建docker image..."
 	@echo "======================================="
+	@echo "检查依赖镜像 aim-mcp:v1.0..."
+	@if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^aim-mcp:v1.0$$"; then \
+		echo "❌ 错误: 找不到 aim-mcp:v1.0 镜像"; \
+		echo ""; \
+		echo "请先确保 aim-mcp:v1.0 镜像存在于本地。"; \
+		echo "如果镜像在其他位置，可以使用以下方法之一："; \
+		echo "  1. 从其他机器导入: docker load < aim-mcp.tar"; \
+		echo "  2. 从私有仓库拉取: docker pull <your-registry>/aim-mcp:v1.0"; \
+		echo "  3. 构建镜像: 参考 aim-mcp 项目的构建说明"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "✅ aim-mcp:v1.0 镜像存在"
+	@echo "开始构建 Docker 镜像..."
 	@docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) -f Dockerfile .
 	@echo "[INFO] docker image构建完成: $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@echo "======================================="
