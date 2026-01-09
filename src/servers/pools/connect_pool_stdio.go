@@ -90,11 +90,11 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 // 创建stdio连接
 func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *LaunchInfo, sid, aid int32) (connection *ExternalConnection, err error) {
 	logger.Debug("创建stdio连接...")
-	
+
 	// 处理 args：如果是 docker 命令，将 env 转换为 -e 参数
 	args := launchInfo.Args
 	isDockerCommand := launchInfo.Command == "docker"
-	
+
 	if isDockerCommand && len(launchInfo.Env) > 0 {
 		// 为 docker 命令构建带环境变量的 args
 		args = buildDockerArgsWithEnv(launchInfo.Args, launchInfo.Env)
@@ -102,7 +102,7 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 			zap.Int("env_count", len(launchInfo.Env)),
 			zap.Strings("args", args))
 	}
-	
+
 	cmd := exec.Command(launchInfo.Command, args...)
 
 	// 对于非 docker 命令，将环境变量设置到进程环境中
@@ -126,6 +126,9 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 	} else {
 		// 即使没有自定义环境变量，也要继承父进程环境变量
 		cmd.Env = os.Environ()
+	}
+	if len(launchInfo.Workdir) > 0 {
+		cmd.Dir = launchInfo.Workdir
 	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "AgentEarth-Proxy-Stdio",
@@ -168,7 +171,8 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 
 // buildDockerArgsWithEnv 将环境变量转换为 docker -e 参数
 // 例如：["run", "--rm", "-i", "image"] + {"KEY": "value"}
-//   -> ["run", "--rm", "-i", "-e", "KEY=value", "image"]
+//
+//	-> ["run", "--rm", "-i", "-e", "KEY=value", "image"]
 func buildDockerArgsWithEnv(originalArgs []string, env map[string]interface{}) []string {
 	if len(env) == 0 {
 		return originalArgs
