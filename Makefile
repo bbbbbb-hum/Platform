@@ -27,6 +27,10 @@ DOCKER_IMAGE_NAME := ae-platform-api
 DOCKER_IMAGE_TAG := $(shell date '+%Y%m%d%H%M%S')
 DOCKER_REP_PATH ?=
 XLDOCKER_REP_PATH ?=
+# 控制是否在 docker build 时拉取镜像
+# missing: 本地没有或需要更新时拉取（默认）
+# false: 只使用本地镜像，不检查更新（避免限流，但可能使用旧镜像）
+DOCKER_PULL_POLICY ?= missing
 
 # 所有依赖的 MCP 镜像（18个）
 MCP_IMAGES := \
@@ -141,7 +145,7 @@ dockerimg: build
 		echo ""; \
 		echo "=======================================";\
 		echo "发现 $$MISSING_COUNT 个镜像缺失，开始顺序拉取..."; \
-		echo "注意: 每次拉取后等待5秒，避免触发限流"; \
+		echo "注意: 每次拉取后等待15秒，避免触发限流"; \
 		echo "=======================================";\
 		PULL_COUNT=0; \
 		for img in $(MCP_IMAGES); do \
@@ -149,17 +153,28 @@ dockerimg: build
 				PULL_COUNT=$$((PULL_COUNT + 1)); \
 				echo ""; \
 				echo "[$$PULL_COUNT/$$MISSING_COUNT] 拉取: $(XLDOCKER_REP_PATH)$$img"; \
-				if docker pull $(XLDOCKER_REP_PATH)$$img; then \
-					echo "✅ 拉取成功: $$img"; \
-					if [ $$PULL_COUNT -lt $$MISSING_COUNT ]; then \
-						echo "等待5秒后拉取下一个镜像..."; \
-						sleep 5; \
+				# 添加重试逻辑
+				RETRY=0; \
+				while [ $$RETRY -lt 3 ]; do \
+					if docker pull $(XLDOCKER_REP_PATH)$$img; then \
+						echo "✅ 拉取成功: $$img"; \
+						if [ $$PULL_COUNT -lt $$MISSING_COUNT ]; then \
+							echo "等待15秒后拉取下一个镜像..."; \
+							sleep 15; \
+						fi; \
+						break; \
+					else \
+						RETRY=$$((RETRY + 1)); \
+						if [ $$RETRY -lt 3 ]; then \
+							echo "⚠️ 拉取失败，30秒后重试 ($$RETRY/3)..."; \
+							sleep 30; \
+						else \
+							echo "❌ 拉取失败，已重试3次: $$img"; \
+							echo "请检查网络连接或镜像仓库地址"; \
+							exit 1; \
+						fi; \
 					fi; \
-				else \
-					echo "❌ 拉取失败: $$img"; \
-					echo "请检查网络连接或镜像仓库地址"; \
-					exit 1; \
-				fi; \
+				done; \
 			fi; \
 		done; \
 		echo ""; \
@@ -175,10 +190,17 @@ dockerimg: build
 	@echo "✅ 二进制文件检查通过"
 	@echo "开始构建 Docker 镜像..."
 	@echo "使用 MCP 镜像仓库前缀: '$(XLDOCKER_REP_PATH)'"
+	@echo "镜像拉取策略: --pull=$(DOCKER_PULL_POLICY)"
+	@if [ "$(DOCKER_PULL_POLICY)" = "false" ]; then \
+		echo "⚠️  注意: 将使用本地镜像，不检查更新"; \
+	else \
+		echo "ℹ️  将检查镜像更新（可能触发限流）"; \
+	fi
 	@echo "注意: 如遇429限流错误，将自动重试..."
 	@for i in 1 2 3; do \
 		echo "尝试构建 ($$i/3)..."; \
 		if DOCKER_BUILDKIT=1 docker build \
+			--pull=$(DOCKER_PULL_POLICY) \
 			--build-arg DOCKER_REP_PATH=$(DOCKER_REP_PATH) \
 			--build-arg XLDOCKER_REP_PATH=$(XLDOCKER_REP_PATH) \
 			-t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) \
