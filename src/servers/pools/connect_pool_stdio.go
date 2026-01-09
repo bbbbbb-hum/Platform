@@ -2,6 +2,7 @@ package pools
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -105,6 +106,10 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 
 	cmd := exec.Command(launchInfo.Command, args...)
 
+	// 捕获 stderr 用于调试
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	// 对于非 docker 命令，将环境变量设置到进程环境中
 	if !isDockerCommand && len(launchInfo.Env) > 0 {
 		// 首先继承父进程的所有环境变量
@@ -154,7 +159,11 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 				zap.Duration("elapsed", duration),
 				zap.Error(err1))
 		} else {
-			logger.Error("创建stdio连接失败", zap.Int32("aid", aid), zap.Any("command", cmd), zap.Error(err1))
+			logger.Error("创建stdio连接失败",
+				zap.Int32("aid", aid),
+				zap.Any("command", cmd),
+				zap.String("stderr", stderrBuf.String()),
+				zap.Error(err1))
 		}
 		err = err1
 		return
