@@ -126,30 +126,47 @@ dockerimg: build
 	@echo "开始构建docker image..."
 	@echo "======================================="
 	@echo "检查所有依赖的 MCP 镜像 (18个)..."
-	@MISSING_IMAGES=""; \
+	@MISSING_COUNT=0; \
+	PULL_NEEDED=0; \
 	for img in $(MCP_IMAGES); do \
 		if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$img$$"; then \
 			echo "❌ 缺失: $$img"; \
-			MISSING_IMAGES="$$MISSING_IMAGES$$img "; \
+			MISSING_COUNT=$$((MISSING_COUNT + 1)); \
+			PULL_NEEDED=1; \
 		else \
 			echo "✅ 存在: $$img"; \
 		fi; \
 	done; \
-	if [ -n "$$MISSING_IMAGES" ]; then \
+	if [ $$PULL_NEEDED -eq 1 ]; then \
 		echo ""; \
 		echo "=======================================";\
-		echo "❌ 错误: 以下镜像不存在:"; \
-		echo "$$MISSING_IMAGES" | tr ' ' '\n' | sed 's/^/  - /'; \
-		echo ""; \
-		echo "请先确保所有镜像存在于本地。"; \
-		echo "可以使用以下方法："; \
-		echo "  1. 从备份导入: docker load < mcp-images.tar"; \
-		echo "  2. 从仓库拉取: docker pull <registry>/IMAGE_NAME"; \
-		echo "  3. 逐个构建镜像: 参考各 MCP 项目的构建说明"; \
+		echo "发现 $$MISSING_COUNT 个镜像缺失，开始顺序拉取..."; \
+		echo "注意: 每次拉取后等待5秒，避免触发限流"; \
 		echo "=======================================";\
-		exit 1; \
+		PULL_COUNT=0; \
+		for img in $(MCP_IMAGES); do \
+			if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$img$$"; then \
+				PULL_COUNT=$$((PULL_COUNT + 1)); \
+				echo ""; \
+				echo "[$$PULL_COUNT/$$MISSING_COUNT] 拉取: $(XLDOCKER_REP_PATH)$$img"; \
+				if docker pull $(XLDOCKER_REP_PATH)$$img; then \
+					echo "✅ 拉取成功: $$img"; \
+					if [ $$PULL_COUNT -lt $$MISSING_COUNT ]; then \
+						echo "等待5秒后拉取下一个镜像..."; \
+						sleep 5; \
+					fi; \
+				else \
+					echo "❌ 拉取失败: $$img"; \
+					echo "请检查网络连接或镜像仓库地址"; \
+					exit 1; \
+				fi; \
+			fi; \
+		done; \
+		echo ""; \
+		echo "✅ 所有缺失镜像已拉取完成"; \
+	else \
+		echo "✅ 所有 MCP 镜像已存在 (18/18)"; \
 	fi
-	@echo "✅ 所有 MCP 镜像检查通过 (18/18)"
 	@if [ ! -f "$(BINARY_PATH)" ]; then \
 		echo "❌ 错误: 找不到二进制文件 $(BINARY_PATH)"; \
 		echo "请先运行 make build 构建项目"; \
@@ -158,11 +175,26 @@ dockerimg: build
 	@echo "✅ 二进制文件检查通过"
 	@echo "开始构建 Docker 镜像..."
 	@echo "使用 MCP 镜像仓库前缀: '$(XLDOCKER_REP_PATH)'"
-	@docker build \
-		--build-arg DOCKER_REP_PATH=$(DOCKER_REP_PATH) \
-		--build-arg XLDOCKER_REP_PATH=$(XLDOCKER_REP_PATH) \
-		-t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) \
-		-f Dockerfile $(DIST_DIR)
+	@echo "注意: 如遇429限流错误，将自动重试..."
+	@for i in 1 2 3; do \
+		echo "尝试构建 ($$i/3)..."; \
+		if DOCKER_BUILDKIT=1 docker build \
+			--build-arg DOCKER_REP_PATH=$(DOCKER_REP_PATH) \
+			--build-arg XLDOCKER_REP_PATH=$(XLDOCKER_REP_PATH) \
+			-t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) \
+			-f Dockerfile $(DIST_DIR); then \
+			echo "✅ Docker 镜像构建成功"; \
+			break; \
+		else \
+			if [ $$i -lt 3 ]; then \
+				echo "⚠️ 构建失败，等待30秒后重试..."; \
+				sleep 30; \
+			else \
+				echo "❌ 构建失败，已重试3次"; \
+				exit 1; \
+			fi; \
+		fi; \
+	done
 	@echo "[INFO] docker image构建完成: $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@echo "======================================="
 
