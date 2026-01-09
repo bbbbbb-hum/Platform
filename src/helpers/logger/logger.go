@@ -141,7 +141,7 @@ func getLogWriter(filename string, maxSize, maxBackup, maxAge int, compress bool
 	}
 
 	// 配置输出介质
-	if isLocal {
+	if logType == "console" {
 		// 本地开发终端打印和记录文件
 		return zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), fileWriter)
 	} else {
