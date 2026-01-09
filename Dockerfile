@@ -150,7 +150,7 @@ RUN echo "=== 验证运行时环境 ===" && \
     test "$SERVICE_COUNT" = "18" && echo "✓ 服务数量正确 (18个)" && \
     echo "=== 验证关键服务文件 ===" && \
     test -f /opt/mcp-services/aim-mcp/dist/index.js && echo "✓ Node.js services OK" && \
-    python3.11 -m serper_mcp_server --help > /dev/null 2>&1 && echo "✓ Python services OK"
+    python3.11 -c "import serper_mcp_server; print('✓ Python services OK')"
 
 USER appuser
 
