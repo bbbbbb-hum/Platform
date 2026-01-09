@@ -10,28 +10,29 @@
 # 全局构建参数（必须在所有 FROM 之前声明）
 # ========================================
 ARG DOCKER_REP_PATH=""
+ARG XLDOCKER_REP_PATH=""
 
 # ========================================
 # 阶段 1-18: 从本地 MCP 镜像提取文件
 # ========================================
-FROM aim-mcp:v1.0 AS aim-mcp-source
-FROM tavily-mcp:v1.0 AS tavily-mcp-source
-FROM skincare-mcp:v1.0 AS skincare-mcp-source
-FROM shadcn-ui-mcp-server:v1.0 AS shadcn-ui-mcp-server-source
-FROM serper-mcp-server:v1.0 AS serper-mcp-server-source
-FROM qweather-mcp:v1.0 AS qweather-mcp-source
-FROM playwright-mcp:v1.0 AS playwright-mcp-source
-FROM mcp-webresearch:v1.0 AS mcp-webresearch-source
-FROM mcp-webpage-timestamps:v1.0 AS mcp-webpage-timestamps-source
-FROM mcp-status-observer:v1.0 AS mcp-status-observer-source
-FROM mcp-server-learn:v1.0 AS mcp-server-learn-source
-FROM mcp-server-airbnb:v1.0 AS mcp-server-airbnb-source
-FROM mcp-crypto-price:v1.0 AS mcp-crypto-price-source
-FROM math-mcp:v1.0 AS math-mcp-source
-FROM littlesis-mcp:v1.0 AS littlesis-mcp-source
-FROM asset-price-mcp:v1.0 AS asset-price-mcp-source
-FROM vibe-check-mcp-server:v1.0 AS vibe-check-mcp-server-source
-FROM web-scout-mcp:v1.0 AS web-scout-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-aim:v1.0 AS aim-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-tavily:v1.0 AS tavily-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-skincare:v1.0 AS skincare-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-shadcn-ui:v1.0 AS shadcn-ui-mcp-server-source
+FROM ${XLDOCKER_REP_PATH}emcp-serper:v1.0 AS serper-mcp-server-source
+FROM ${XLDOCKER_REP_PATH}emcp-qweather:v1.0 AS qweather-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-playwright:v1.0 AS playwright-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-webresearch:v1.0 AS mcp-webresearch-source
+FROM ${XLDOCKER_REP_PATH}emcp-webpage-timestamps:v1.0 AS mcp-webpage-timestamps-source
+FROM ${XLDOCKER_REP_PATH}emcp-status-observer:v1.0 AS mcp-status-observer-source
+FROM ${XLDOCKER_REP_PATH}emcp-learn:v1.0 AS mcp-server-learn-source
+FROM ${XLDOCKER_REP_PATH}emcp-airbnb:v1.0 AS mcp-server-airbnb-source
+FROM ${XLDOCKER_REP_PATH}emcp-crypto-price:v1.0 AS mcp-crypto-price-source
+FROM ${XLDOCKER_REP_PATH}emcp-math:v1.0 AS math-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-littlesis:v1.0 AS littlesis-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-asset-price:v1.0 AS asset-price-mcp-source
+FROM ${XLDOCKER_REP_PATH}emcp-vibe-check:v1.0 AS vibe-check-mcp-server-source
+FROM ${XLDOCKER_REP_PATH}emcp-web-scout:v1.0 AS web-scout-mcp-source
 
 # ========================================
 # 最终阶段: 构建 ae-platform 运行时镜像
@@ -109,7 +110,7 @@ RUN useradd -u 10001 -m -s /usr/sbin/nologin appuser && \
 WORKDIR /opt/xlapps/AEPlatformAPI
 
 # 复制 ae-platform 可执行文件
-COPY dist/bin/agent-platform-api /opt/xlapps/AEPlatformAPI/bin/agent-platform-api
+COPY bin/agent-platform-api /opt/xlapps/AEPlatformAPI/bin/agent-platform-api
 
 # 复制所有 MCP 服务文件（从各自的镜像中提取）
 COPY --from=aim-mcp-source /app /opt/mcp-services/aim-mcp
@@ -131,7 +132,13 @@ COPY --from=asset-price-mcp-source /app /opt/mcp-services/asset-price-mcp
 COPY --from=vibe-check-mcp-server-source /app /opt/mcp-services/vibe-check-mcp-server
 COPY --from=web-scout-mcp-source /app /opt/mcp-services/web-scout-mcp
 
-# 验证安装（无需安装 Python 包，直接使用源码）
+# 安装 Python 包（serper-mcp-server）
+RUN cd /opt/mcp-services/serper-mcp-server && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 pip3 install --no-cache-dir . && \
+    cd / && \
+    rm -rf /root/.cache
+
+# 验证安装
 RUN echo "=== 验证运行时环境 ===" && \
     node --version && \
     python3.11 --version && \
@@ -141,7 +148,7 @@ RUN echo "=== 验证运行时环境 ===" && \
     test "$SERVICE_COUNT" = "18" && echo "✓ 服务数量正确 (18个)" && \
     echo "=== 验证关键服务文件 ===" && \
     test -f /opt/mcp-services/aim-mcp/dist/index.js && echo "✓ Node.js services OK" && \
-    test -f /opt/mcp-services/serper-mcp-server/pyproject.toml && echo "✓ Python services OK"
+    python3.11 -m serper_mcp_server --help > /dev/null 2>&1 && echo "✓ Python services OK"
 
 USER appuser
 

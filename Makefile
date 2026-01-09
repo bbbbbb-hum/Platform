@@ -25,6 +25,29 @@ GOARCH := amd64
 # ========================
 DOCKER_IMAGE_NAME := ae-platform-api
 DOCKER_IMAGE_TAG := $(shell date '+%Y%m%d%H%M%S')
+DOCKER_REP_PATH ?=
+XLDOCKER_REP_PATH ?=
+
+# 所有依赖的 MCP 镜像（18个）
+MCP_IMAGES := \
+	emcp-aim:v1.0 \
+	emcp-tavily:v1.0 \
+	emcp-skincare:v1.0 \
+	emcp-shadcn-ui:v1.0 \
+	emcp-serper:v1.0 \
+	emcp-qweather:v1.0 \
+	emcp-playwright:v1.0 \
+	emcp-webresearch:v1.0 \
+	emcp-webpage-timestamps:v1.0 \
+	emcp-status-observer:v1.0 \
+	emcp-learn:v1.0 \
+	emcp-airbnb:v1.0 \
+	emcp-crypto-price:v1.0 \
+	emcp-math:v1.0 \
+	emcp-littlesis:v1.0 \
+	emcp-asset-price:v1.0 \
+	emcp-vibe-check:v1.0 \
+	emcp-web-scout:v1.0
 
 # ========================
 # Phony targets
@@ -98,25 +121,48 @@ clean:
 # ========================
 # Build docker image
 # ========================
-dockerimg:
+dockerimg: build
 	@echo "======================================="
 	@echo "开始构建docker image..."
 	@echo "======================================="
-	@echo "检查依赖镜像 aim-mcp:v1.0..."
-	@if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^aim-mcp:v1.0$$"; then \
-		echo "❌ 错误: 找不到 aim-mcp:v1.0 镜像"; \
+	@echo "检查所有依赖的 MCP 镜像 (18个)..."
+	@MISSING_IMAGES=""; \
+	for img in $(MCP_IMAGES); do \
+		if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^$$img$$"; then \
+			echo "❌ 缺失: $$img"; \
+			MISSING_IMAGES="$$MISSING_IMAGES$$img "; \
+		else \
+			echo "✅ 存在: $$img"; \
+		fi; \
+	done; \
+	if [ -n "$$MISSING_IMAGES" ]; then \
 		echo ""; \
-		echo "请先确保 aim-mcp:v1.0 镜像存在于本地。"; \
-		echo "如果镜像在其他位置，可以使用以下方法之一："; \
-		echo "  1. 从其他机器导入: docker load < aim-mcp.tar"; \
-		echo "  2. 从私有仓库拉取: docker pull <your-registry>/aim-mcp:v1.0"; \
-		echo "  3. 构建镜像: 参考 aim-mcp 项目的构建说明"; \
+		echo "=======================================";\
+		echo "❌ 错误: 以下镜像不存在:"; \
+		echo "$$MISSING_IMAGES" | tr ' ' '\n' | sed 's/^/  - /'; \
 		echo ""; \
+		echo "请先确保所有镜像存在于本地。"; \
+		echo "可以使用以下方法："; \
+		echo "  1. 从备份导入: docker load < mcp-images.tar"; \
+		echo "  2. 从仓库拉取: docker pull <registry>/IMAGE_NAME"; \
+		echo "  3. 逐个构建镜像: 参考各 MCP 项目的构建说明"; \
+		echo "=======================================";\
 		exit 1; \
 	fi
-	@echo "✅ aim-mcp:v1.0 镜像存在"
+	@echo "✅ 所有 MCP 镜像检查通过 (18/18)"
+	@if [ ! -f "$(BINARY_PATH)" ]; then \
+		echo "❌ 错误: 找不到二进制文件 $(BINARY_PATH)"; \
+		echo "请先运行 make build 构建项目"; \
+		exit 1; \
+	fi
+	@echo "✅ 二进制文件检查通过"
 	@echo "开始构建 Docker 镜像..."
-	@docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) -f Dockerfile .
+	@echo "使用 MCP 镜像仓库前缀: '$(XLDOCKER_REP_PATH)'"
+	@docker build \
+		--build-arg DOCKER_REP_PATH=$(DOCKER_REP_PATH) \
+		--build-arg XLDOCKER_REP_PATH=$(XLDOCKER_REP_PATH) \
+		-t $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) \
+		-f Dockerfile $(DIST_DIR)
 	@echo "[INFO] docker image构建完成: $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@echo "======================================="
 
