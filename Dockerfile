@@ -133,10 +133,11 @@ COPY --from=vibe-check-mcp-server-source /app /opt/mcp-services/vibe-check-mcp-s
 COPY --from=web-scout-mcp-source /app /opt/mcp-services/web-scout-mcp
 
 # 安装 Python 包（serper-mcp-server）
-# 先升级 pip 和 setuptools，确保能安装新版本的包
-RUN python3.11 -m pip install --upgrade pip setuptools wheel && \
+# 使用阿里云镜像源，在流水线环境中更稳定
+RUN python3.11 -m pip install --upgrade pip setuptools wheel -i https://mirrors.aliyun.com/pypi/simple/ && \
+    python3.11 -m pip install setuptools-scm -i https://mirrors.aliyun.com/pypi/simple/ && \
     cd /opt/mcp-services/serper-mcp-server && \
-    SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 python3.11 -m pip install --no-cache-dir . && \
+    SETUPTOOLS_SCM_PRETEND_VERSION=1.0.0 python3.11 -m pip install --no-cache-dir . -i https://mirrors.aliyun.com/pypi/simple/ && \
     cd / && \
     rm -rf /root/.cache
 
