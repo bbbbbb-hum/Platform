@@ -30,6 +30,46 @@ func init() {
 	config.Initialize()
 }
 
+// healthHandler 健康检查处理器 - 用于 Kubernetes liveness probe
+// 检查服务是否存活，不检查依赖服务
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+}
+
+// readyHandler 就绪检查处理器 - 用于 Kubernetes readiness probe
+// 检查服务是否准备好接收流量（数据库连接、MCP服务等）
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 检查数据库连接
+	db := boot.GetDB()
+	if db == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"status":"unavailable","reason":"database not initialized","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+		return
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil || sqlDB.Ping() != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"status":"unavailable","reason":"database connection failed","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+		return
+	}
+
+	// 检查 MCP 服务是否已初始化
+	if len(servers.McpServicesMap) == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"status":"unavailable","reason":"mcp services not initialized","timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+		return
+	}
+
+	// 所有检查通过
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ready","mcp_services":` + strconv.Itoa(len(servers.McpServicesMap)) + `,"timestamp":"` + time.Now().Format(time.RFC3339) + `"}`))
+}
+
 func main() {
 
 	// 配置初始化，依赖命令行 --configfile 参数
@@ -84,6 +124,10 @@ func main() {
 
 	// Prometheus metrics 端点（不需要认证）
 	mux.Handle("/metrics", promhttp.Handler())
+
+	// 健康检查端点（不需要认证）
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/ready", readyHandler)
 
 	// 生产环境不开启
 	if env != "prod" {

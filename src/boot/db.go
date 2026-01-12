@@ -119,3 +119,8 @@ func SetupDB() {
 	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 	// database.DB.AutoMigrate(&user.User{})
 }
+
+// GetDB 获取数据库连接实例
+func GetDB() *gorm.DB {
+	return database.DB
+}
