@@ -145,7 +145,7 @@ dockerimg: build
 		echo ""; \
 		echo "=======================================";\
 		echo "发现 $$MISSING_COUNT 个镜像缺失，开始顺序拉取..."; \
-		echo "注意: 每次拉取后等待15秒，避免触发限流"; \
+		echo "注意: 每次拉取后等待5秒，避免触发限流"; \
 		echo "=======================================";\
 		PULL_COUNT=0; \
 		for img in $(MCP_IMAGES); do \
@@ -159,8 +159,8 @@ dockerimg: build
 					if docker pull $(XLDOCKER_REP_PATH)$$img; then \
 						echo "✅ 拉取成功: $$img"; \
 						if [ $$PULL_COUNT -lt $$MISSING_COUNT ]; then \
-							echo "等待15秒后拉取下一个镜像..."; \
-							sleep 15; \
+							echo "等待5秒后拉取下一个镜像..."; \
+							sleep 5; \
 						fi; \
 						break; \
 					else \

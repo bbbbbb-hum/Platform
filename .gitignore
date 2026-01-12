@@ -31,3 +31,5 @@ mcp_servers/
 
 node_modules/
 docs/
+
+.dockerignore
