@@ -32,11 +32,11 @@ func init() {
 
 func main() {
 
-	// 配置初始化，依赖命令行 --env 参数
-	var env string
-	flag.StringVar(&env, "env", "", "加载 .env 文件，如 --env=testing 加载的是 .env_testing 文件")
+	// 配置初始化，依赖命令行 --configfile 参数
+	var configfile string
+	flag.StringVar(&configfile, "configfile", "", "加载配置文件，如 --configfile=agent_plat_form.yml 加载的是 ./agent_plat_form.yml 文件")
 	flag.Parse()
-	helperConfig.InitConfig(env)
+	helperConfig.InitConfig(configfile)
 
 	// 初始化 Logger
 	boot.SetupLogger()
@@ -53,7 +53,7 @@ func main() {
 	// 初始化 Prometheus Metrics
 	middleware.InitMetrics()
 	logger.Info("Prometheus metrics 初始化完成")
-
+	env := helperConfig.GetString("SERVER_ENV")
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 

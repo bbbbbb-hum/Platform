@@ -2,7 +2,6 @@ package config
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers"
-	"os"
 
 	"github.com/spf13/cast"
 	viperlib "github.com/spf13/viper"
@@ -22,9 +21,9 @@ func init() {
 	viper = viperlib.New()
 	// 2. 配置类型，支持 "json", "toml", "yaml", "yml", "properties",
 	//             "props", "prop", "env", "dotenv"
-	viper.SetConfigType("env")
+	viper.SetConfigType("yml")
 	// 4. 设置环境变量前缀，用以区分 Go 的系统环境变量
-	viper.SetEnvPrefix("appenv")
+	// viper.SetEnvPrefix("appenv")
 	// 5. 读取环境变量（支持 flags）
 	viper.AutomaticEnv()
 
@@ -32,9 +31,9 @@ func init() {
 }
 
 // InitConfig 初始化配置信息，完成对环境变量以及 config 信息的加载
-func InitConfig(env string) {
+func InitConfig(configfile string) {
 	// 1. 加载环境变量
-	loadEnv(env)
+	loadEnv(configfile)
 	// 2. 注册配置信息
 	loadConfig()
 }
@@ -45,25 +44,18 @@ func loadConfig() {
 	}
 }
 
-func loadEnv(envSuffix string) {
-
-	// 默认加载 .env 文件，如果有传参 --env=name 的话，加载 .env.name 文件
-	envPath := "./config/.env.local"
-
-	if len(envSuffix) > 0 {
-		filepath := "/opt/xlconfigs/AEPlatformAPI/.env." + envSuffix
-		if _, err := os.Stat(filepath); err == nil {
-			// 如 .env.testing 或 .env.stage
-			envPath = filepath
-		}
+func loadEnv(configfile string) {
+	if len(configfile) == 0 {
+		// 默认加载 /opt/xlconfigs/AEPlatformAPI/agent_plat_form.yml 文件，如果有传参 --configfile=name 的话，加载 name 文件
+		configfile = "/opt/xlconfigs/AEPlatformAPI/agent_plat_form.yml"
 	}
 
-	// 加载 env
-	viper.SetConfigFile(envPath)
+	// 加载 configfile
+	viper.SetConfigFile(configfile)
 	if err := viper.ReadInConfig(); err != nil {
 		panic(err)
 	}
-	// 监控 .env 文件，变更时重新加载
+	// 监控 configfile 文件，变更时重新加载
 	viper.WatchConfig()
 }
 
