@@ -64,8 +64,7 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Too Many Requests: Calls limit exceeded", http.StatusTooManyRequests)
 			return
 		}
-
-		logger.Info(fmt.Sprintf("Authentication successful for request %s %s", r.Method, r.URL.Path))
+		logger.Info(fmt.Sprintf("Authentication successful for request %s %s,ENV: dev03", r.Method, r.URL.Path))
 		next(w, r)
 	}
 }
