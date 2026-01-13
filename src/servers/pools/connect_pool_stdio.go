@@ -2,6 +2,7 @@ package pools
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -90,16 +91,34 @@ func (c *ConnectionPool) createInstancesForStdio(ctx context.Context, service *E
 // 创建stdio连接
 func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *LaunchInfo, sid, aid int32) (connection *ExternalConnection, err error) {
 	logger.Debug("创建stdio连接...")
-	cmd := exec.Command(launchInfo.Command, launchInfo.Args...)
 
-	if len(launchInfo.Env) > 0 {
+	// 处理 args：如果是 docker 命令，将 env 转换为 -e 参数
+	args := launchInfo.Args
+	isDockerCommand := launchInfo.Command == "docker"
+
+	if isDockerCommand && len(launchInfo.Env) > 0 {
+		// 为 docker 命令构建带环境变量的 args
+		args = buildDockerArgsWithEnv(launchInfo.Args, launchInfo.Env)
+		logger.Debug("Docker命令环境变量转换完成",
+			zap.Int("env_count", len(launchInfo.Env)),
+			zap.Strings("args", args))
+	}
+
+	cmd := exec.Command(launchInfo.Command, args...)
+
+	// 捕获 stderr 用于调试
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	// 对于非 docker 命令，将环境变量设置到进程环境中
+	if !isDockerCommand && len(launchInfo.Env) > 0 {
 		// 首先继承父进程的所有环境变量
 		cmd.Env = os.Environ()
 		// 然后添加自定义环境变量
 		for s, k := range launchInfo.Env {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", s, fmt.Sprint(k)))
 		}
-		logger.Debug("环境变量设置完成",
+		logger.Debug("进程环境变量设置完成",
 			zap.Int("total_env_vars", len(cmd.Env)),
 			zap.Int("custom_env_vars", len(launchInfo.Env)),
 			zap.Strings("custom_vars", func() []string {
@@ -112,6 +131,9 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 	} else {
 		// 即使没有自定义环境变量，也要继承父进程环境变量
 		cmd.Env = os.Environ()
+	}
+	if len(launchInfo.Workdir) > 0 {
+		cmd.Dir = launchInfo.Workdir
 	}
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "AgentEarth-Proxy-Stdio",
@@ -137,7 +159,11 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 				zap.Duration("elapsed", duration),
 				zap.Error(err1))
 		} else {
-			logger.Error("创建stdio连接失败", zap.Int32("aid", aid), zap.Any("command", cmd), zap.Error(err1))
+			logger.Error("创建stdio连接失败",
+				zap.Int32("aid", aid),
+				zap.Any("command", cmd),
+				zap.String("stderr", stderrBuf.String()),
+				zap.Error(err1))
 		}
 		err = err1
 		return
@@ -150,4 +176,45 @@ func (c *ConnectionPool) createStdioConnection(ctx context.Context, launchInfo *
 		ActiveUsers:  0,
 	}
 	return
+}
+
+// buildDockerArgsWithEnv 将环境变量转换为 docker -e 参数
+// 例如：["run", "--rm", "-i", "image"] + {"KEY": "value"}
+//
+//	-> ["run", "--rm", "-i", "-e", "KEY=value", "image"]
+func buildDockerArgsWithEnv(originalArgs []string, env map[string]interface{}) []string {
+	if len(env) == 0 {
+		return originalArgs
+	}
+
+	newArgs := make([]string, 0, len(originalArgs))
+	insertIndex := -1
+
+	// 找到 "run" 参数的位置，在其后插入 -e 参数
+	for i, arg := range originalArgs {
+		newArgs = append(newArgs, arg)
+		if arg == "run" && insertIndex == -1 {
+			insertIndex = i + 1
+		}
+	}
+
+	// 如果找到了 run 位置，在该位置后插入环境变量
+	if insertIndex > 0 && insertIndex < len(newArgs) {
+		// 构建环境变量参数
+		envArgs := make([]string, 0, len(env)*2)
+		for k, v := range env {
+			envArgs = append(envArgs, "-e", fmt.Sprintf("%s=%s", k, fmt.Sprint(v)))
+		}
+
+		// 插入环境变量参数
+		result := make([]string, 0, len(newArgs)+len(envArgs))
+		result = append(result, newArgs[:insertIndex]...)
+		result = append(result, envArgs...)
+		result = append(result, newArgs[insertIndex:]...)
+		return result
+	}
+
+	// 如果没找到 run，直接返回原始 args（不应该发生）
+	logger.Warn("Docker 命令中未找到 'run' 参数，环境变量未添加", zap.Strings("args", originalArgs))
+	return originalArgs
 }

@@ -40,7 +40,6 @@ func (m *AeMcpServices) GetOne(id int32) error {
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
 	db = db.Where("is_created = ?", true)
-	//db = db.Where("id IN (?)", []int64{343, 344, 346})
 	err = db.Find(&list).Error
 	return
 }

@@ -21,3 +21,15 @@ dist/
 
 # 过滤掉真实的配置文件
 .env.*
+config/agent_plat_form-*.yml
+
+# 本地 k8s 配置（测试生产走流水线）
+k8s/
+
+# MCP 服务文件（从 Docker 镜像提取，不提交到代码仓库）
+mcp_servers/
+
+node_modules/
+docs/
+
+.dockerignore
