@@ -93,6 +93,9 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connection *ExternalConnection, err error) {
 	logger.Info("创建HTTP连接...", zap.String("Url", connectInfo.Url))
 
+	if connectInfo.Headers == nil { // 增加判空，兼容未初始化的场景
+		connectInfo.Headers = make(map[string]string)
+	}
 	// 配置核心流式请求头
 	connectInfo.Headers["Accept"] = "text/event-stream, application/json"
 	connectInfo.Headers["Connection"] = "keep-alive"
