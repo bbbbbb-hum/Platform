@@ -93,6 +93,10 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connection *ExternalConnection, err error) {
 	logger.Info("创建HTTP连接...", zap.String("Url", connectInfo.Url))
 
+	// 配置核心流式请求头
+	connectInfo.Headers["Accept"] = "text/event-stream, application/json"
+	connectInfo.Headers["Connection"] = "keep-alive"
+	connectInfo.Headers["Accept-Encoding"] = "gzip, deflate"
 	// 创建自定义 Transport，优先使用 IPv4，IPv6 作为备用
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -134,7 +138,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 			Headers:   connectInfo.Headers,
 		},
 	}
-	logger.Info("客户端连接头:", zap.Any("headers", connectInfo.Headers))
+	logger.Info("客户端连接头:", zap.Int32("sid", sid), zap.Any("headers", connectInfo.Headers))
 	// 创建MCP传输
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "time-client",
