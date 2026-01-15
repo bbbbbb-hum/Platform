@@ -92,7 +92,14 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 // 创建httpStreamable连接
 func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, sid, aid int32) (connection *ExternalConnection, err error) {
 	logger.Info("创建HTTP连接...", zap.String("Url", connectInfo.Url))
-	
+
+	if connectInfo.Headers == nil { // 增加判空，兼容未初始化的场景
+		connectInfo.Headers = make(map[string]string)
+	}
+	// 配置核心流式请求头
+	connectInfo.Headers["Accept"] = "text/event-stream, application/json"
+	connectInfo.Headers["Connection"] = "keep-alive"
+	connectInfo.Headers["Accept-Encoding"] = "gzip, deflate"
 	// 创建自定义 Transport，优先使用 IPv4，IPv6 作为备用
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -100,14 +107,14 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}
-			
+
 			// 优先尝试 IPv4
 			conn, err := dialer.DialContext(ctx, "tcp4", addr)
 			if err == nil {
 				logger.Debug("使用 IPv4 连接成功", zap.String("addr", addr))
 				return conn, nil
 			}
-			
+
 			// IPv4 失败，尝试 IPv6（如果环境支持）
 			logger.Warn("IPv4 连接失败，尝试 IPv6", zap.String("addr", addr), zap.Error(err))
 			conn, err = dialer.DialContext(ctx, "tcp6", addr)
@@ -115,7 +122,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 				logger.Debug("使用 IPv6 连接成功", zap.String("addr", addr))
 				return conn, nil
 			}
-			
+
 			// 都失败，返回错误
 			logger.Error("IPv4 和 IPv6 连接均失败", zap.String("addr", addr), zap.Error(err))
 			return nil, err
@@ -126,7 +133,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-	
+
 	// 创建HTTP客户端
 	httpClient := &http.Client{
 		Transport: &headerTransport{
@@ -134,6 +141,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 			Headers:   connectInfo.Headers,
 		},
 	}
+	logger.Info("客户端连接头:", zap.Int32("sid", sid), zap.Any("headers", connectInfo.Headers))
 	// 创建MCP传输
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "time-client",
