@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -226,6 +227,12 @@ func safeAddTool(server *Server, tool *types.ToolDesc) (ok bool) {
 
 // OnCallTool 新的工具调用处理器
 func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
+	// 记录开始时间
+	startTime := time.Now()
+
+	// 确保log_type已设置
+	ctx = logger.SetLogType(ctx, "AgentGWCall")
+
 	toolName := req.Params.Name
 	// 创建节点上下文
 	ctxNode := &types.RunningContext{
@@ -234,8 +241,37 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		Stats:     make(map[string]interface{}),
 	}
 	logger.Debug("开始处理", zap.String("tool_name", toolName))
+
+	// 填充日志字段到context：服务名称、方法名称、参数
+	ctx = logger.SetServiceName(ctx, s.ServerName)
+	ctx = logger.SetMethod(ctx, toolName)
+	ctx = logger.SetParam(ctx, args)
+
 	// 链处理
 	result, err := s.ChainInstance.Process(ctxNode, toolName, args)
+
+	// 计算耗时
+	duration := time.Since(startTime)
+	ctx = logger.SetApiLogTime(ctx, strconv.FormatInt(duration.Milliseconds(), 10))
+
+	// 如果出错：填充错误信息；如果成功，填充返回信息
+	if err != nil {
+		ctx = logger.SetStatusCode(ctx, "500")
+		ctx = logger.SetMessage(ctx, err.Error())
+		ctx = logger.SetResponseData(ctx, nil)
+	} else {
+		ctx = logger.SetStatusCode(ctx, "200")
+		ctx = logger.SetMessage(ctx, "success")
+		if result != nil {
+			ctx = logger.SetResponseData(ctx, result)
+		} else {
+			ctx = logger.SetResponseData(ctx, nil)
+		}
+	}
+
+	// 从context获取字段并打印日志
+	logger.LogAPICall(ctx)
+
 	if err != nil {
 		return nil, nil, err
 	}
