@@ -1,6 +1,7 @@
 package servers
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/task_chain"
@@ -262,11 +263,11 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 
 	// 从context获取apiKeyName和userID
 	apiKeyName := ""
-	if val, ok := ctx.Value(logger.ContextKeyApiKeyName).(string); ok {
+	if val, ok := ctx.Value(helpers.ContextKeyApiKeyName).(string); ok {
 		apiKeyName = val
 	}
 	userID := ""
-	if val, ok := ctx.Value(logger.ContextKeyUserID).(string); ok {
+	if val, ok := ctx.Value(helpers.ContextKeyUserID).(string); ok {
 		userID = val
 	}
 

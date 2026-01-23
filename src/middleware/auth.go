@@ -71,8 +71,8 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		// APILOG -- 将keyname和userID存入context
 		if strings.HasPrefix(r.URL.Path, "/mcp-server/") {
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, logger.ContextKeyApiKeyName, apiKeyName)
-			ctx = context.WithValue(ctx, logger.ContextKeyUserID, userID)
+			ctx = context.WithValue(ctx, helpers.ContextKeyApiKeyName, apiKeyName)
+			ctx = context.WithValue(ctx, helpers.ContextKeyUserID, userID)
 			r = r.WithContext(ctx)
 		}
 
