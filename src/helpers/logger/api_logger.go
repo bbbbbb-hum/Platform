@@ -45,10 +45,7 @@ func LogAPICall(ctx context.Context) {
 	}
 
 	// 获取所有字段值
-	logType := getStringFromContext(ctx, ContextKeyLogType)
-	if logType == "" {
-		logType = "AgentGWCall"
-	}
+	logType := "AgentGWCall"
 	apiKeyName := getStringFromContext(ctx, ContextKeyApiKeyName)
 	serviceName := getStringFromContext(ctx, ContextKeyServiceName)
 	param := getInterfaceFromContext(ctx, ContextKeyParam)

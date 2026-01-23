@@ -69,7 +69,6 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		// APILOG -- 将keyname存入context
 		if strings.HasPrefix(r.URL.Path, "/mcp-server/") {
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, logger.ContextKeyLogType, "AgentGWCall")
 			ctx = context.WithValue(ctx, logger.ContextKeyApiKeyName, apiKeyName)
 			r = r.WithContext(ctx)
 		}
