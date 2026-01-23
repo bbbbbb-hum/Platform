@@ -257,7 +257,6 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
 			message = textContent.Text
 		}
-		// 从result结构体中直接获取isError字段
 		isError = result.IsError
 	}
 
