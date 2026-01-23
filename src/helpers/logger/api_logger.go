@@ -13,7 +13,6 @@ type contextKey string
 const (
 	contextKeyLogType      contextKey = "api_log_log_type"
 	contextKeyApiKeyName   contextKey = "api_log_apikey_name"
-	contextKeyRequestID    contextKey = "api_log_request_id"
 	contextKeyServiceName  contextKey = "api_log_service_name"
 	contextKeyMethod       contextKey = "api_log_method"
 	contextKeyParam        contextKey = "api_log_param"
@@ -31,11 +30,6 @@ func SetLogType(ctx context.Context, logType string) context.Context {
 // SetApiKeyName 设置apikey名称到context
 func SetApiKeyName(ctx context.Context, apiKeyName string) context.Context {
 	return context.WithValue(ctx, contextKeyApiKeyName, apiKeyName)
-}
-
-// SetRequestID 设置请求ID到context
-func SetRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, contextKeyRequestID, requestID)
 }
 
 // SetServiceName 设置服务名称到context
@@ -101,7 +95,6 @@ func LogAPICall(ctx context.Context) {
 		logType = "AgentGWCall"
 	}
 	apiKeyName := getStringFromContext(ctx, contextKeyApiKeyName)
-	requestID := getStringFromContext(ctx, contextKeyRequestID)
 	serviceName := getStringFromContext(ctx, contextKeyServiceName)
 	param := getInterfaceFromContext(ctx, contextKeyParam)
 	statusCode := getStringFromContext(ctx, contextKeyStatusCode)
@@ -113,13 +106,12 @@ func LogAPICall(ctx context.Context) {
 	Logger.Debug("MCP服务日志",
 		zap.String("log_type", logType),         // 0. 必须存在的字段 -- "AgentGWCall"
 		zap.String("apikey_name", apiKeyName),   // 1. apikey的名称
-		zap.String("request_id", requestID),     // 2. 请求id
-		zap.String("service_name", serviceName), // 3. 访问的服务名称
-		zap.String("method", method),            // 4. 访问的服务中的工具名称
-		zap.Any("param", param),                 // 5. 访问服务需要的参数列表
-		zap.String("status_code", statusCode),   // 6. 返回给用户的状态码
-		zap.String("msg", message),              // 7. 返回给用户的消息
-		zap.Any("response_data", responseData),  // 8. 返回给用户的内容
-		zap.String("duration_ms", durationMs),   // 9. 调用时间 -- ms
+		zap.String("service_name", serviceName), // 2. 访问的服务名称
+		zap.String("method", method),            // 3. 访问的服务中的工具名称
+		zap.Any("param", param),                 // 4. 访问服务需要的参数列表
+		zap.String("status_code", statusCode),   // 5. 返回给用户的状态码
+		zap.String("msg", message),              // 6. 返回给用户的消息
+		zap.Any("response_data", responseData),  // 7. 返回给用户的内容
+		zap.String("duration_ms", durationMs),   // 8. 调用时间 -- ms
 	)
 }
