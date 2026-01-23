@@ -245,33 +245,20 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	// 计算耗时
 	duration := time.Since(startTime)
 
-	// 确定状态码和消息
-	var statusCode, message string
+	// 确定isError和消息
+	var isError bool
+	var message string
 	if err != nil {
 		// 1. 工具链调用错误
-		statusCode, message = "500", err.Error()
+		isError = true
+		message = err.Error()
 	} else {
-		// 将result序列化为JSON，然后反序列化为map以获取字段
-		var resultMap map[string]interface{}
-		if resultJSON, jsonErr := json.Marshal(result); jsonErr != nil {
-			statusCode, message = "500", "获取字段失败"
-		} else if json.Unmarshal(resultJSON, &resultMap) != nil {
-			statusCode, message = "500", "获取字段失败"
-		} else if isError, ok := resultMap["isError"].(bool); ok && isError {
-			// 2. isError为true，说明出错了
-			message = "执行失败"
-			if content, ok := resultMap["content"].([]interface{}); ok && len(content) > 0 {
-				if firstContent, ok := content[0].(map[string]interface{}); ok {
-					if text, ok := firstContent["text"].(string); ok {
-						message = text
-					}
-				}
-			}
-			statusCode = "500"
-		} else {
-			// 3. 没有错误，全部成功
-			statusCode, message = "200", "success"
+		// 2. 工具链调用正确，直接从结构体中获取isError和message
+		if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
+			message = textContent.Text
 		}
+		// 从result结构体中直接获取isError字段
+		isError = result.IsError
 	}
 
 	// 从context获取apiKeyName和userID
@@ -292,8 +279,8 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		zap.String("service_name", s.ServerName),                                  // 3. 访问的服务名称
 		zap.String("method", toolName),                                            // 4. 访问的服务中的工具名称
 		zap.Any("param", args),                                                    // 5. 访问服务需要的参数列表
-		zap.String("status_code", statusCode),                                     // 6. 返回给用户的状态码
-		zap.String("msg", message),                                                // 7. 返回给用户的消息
+		zap.Bool("is_error", isError),                                             // 6. 是否为错误
+		zap.String("msg", message),                                                // 7. 当MCP失败时，错误信息
 		zap.Any("response_data", result),                                          // 8. 返回给用户的内容
 		zap.String("duration_ms", strconv.FormatInt(duration.Milliseconds(), 10)), // 9. 调用时间 -- ms
 	)
