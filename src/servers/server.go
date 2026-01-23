@@ -254,19 +254,54 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	duration := time.Since(startTime)
 	ctx = logger.SetApiLogTime(ctx, strconv.FormatInt(duration.Milliseconds(), 10))
 
-	// 如果出错：填充错误信息；如果成功，填充返回信息
+	// 设置response_data
+	if result != nil {
+		ctx = logger.SetResponseData(ctx, result)
+	} else {
+		ctx = logger.SetResponseData(ctx, nil)
+	}
+
+	// 设置错误码和错误信息
 	if err != nil {
+		// 1. 工具调用错误 -- 直接设置错误信息
 		ctx = logger.SetStatusCode(ctx, "500")
 		ctx = logger.SetMessage(ctx, err.Error())
-		ctx = logger.SetResponseData(ctx, nil)
-	} else {
-		ctx = logger.SetStatusCode(ctx, "200")
-		ctx = logger.SetMessage(ctx, "success")
-		if result != nil {
-			ctx = logger.SetResponseData(ctx, result)
+	} else if result != nil {
+		// 2. 工具调用成功，检查result中是否有isError字段为true
+		if resultJSON, jsonErr := json.Marshal(result); jsonErr == nil {
+			var resultMap map[string]interface{}
+			if json.Unmarshal(resultJSON, &resultMap) == nil {
+				if isError, ok := resultMap["isError"].(bool); ok && isError {
+					// isError为true，直接设置错误码和错误信息
+					errorMessage := "执行失败"
+					if content, ok := resultMap["content"].([]interface{}); ok && len(content) > 0 {
+						if firstContent, ok := content[0].(map[string]interface{}); ok {
+							if text, ok := firstContent["text"].(string); ok {
+								errorMessage = text
+							}
+						}
+					}
+					ctx = logger.SetStatusCode(ctx, "500")
+					ctx = logger.SetMessage(ctx, errorMessage)
+				} else {
+					// 没有错误，设置成功状态
+					ctx = logger.SetStatusCode(ctx, "200")
+					ctx = logger.SetMessage(ctx, "success")
+				}
+			} else {
+				// 解析失败，默认成功
+				ctx = logger.SetStatusCode(ctx, "200")
+				ctx = logger.SetMessage(ctx, "success")
+			}
 		} else {
-			ctx = logger.SetResponseData(ctx, nil)
+			// 序列化失败
+			ctx = logger.SetStatusCode(ctx, "500")
+			ctx = logger.SetMessage(ctx, "json Marshall Failed")
 		}
+	} else {
+		// result为nil
+		ctx = logger.SetStatusCode(ctx, "500")
+		ctx = logger.SetMessage(ctx, "result is nil")
 	}
 
 	// 从context获取字段并打印日志
