@@ -52,11 +52,13 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		// 使用 Header API Key
 		apiKey := r.Header.Get(a.HeaderKey)
 
-		// 获取apikey名称
+		// 获取apikey名称和userID
 		apiKeyName := ""
+		userID := ""
 		if a.userCache != nil {
-			_, _, keyName, _, _ := a.userCache.Get(apiKey)
+			uid, _, keyName, _, _ := a.userCache.Get(apiKey)
 			apiKeyName = keyName
+			userID = uid
 		}
 
 		// 验证API密钥
@@ -66,10 +68,11 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// APILOG -- 将keyname存入context
+		// APILOG -- 将keyname和userID存入context
 		if strings.HasPrefix(r.URL.Path, "/mcp-server/") {
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, logger.ContextKeyApiKeyName, apiKeyName)
+			ctx = context.WithValue(ctx, logger.ContextKeyUserID, userID)
 			r = r.WithContext(ctx)
 		}
 

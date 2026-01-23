@@ -274,18 +274,29 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		}
 	}
 
-	// 统一向context写入所有字段
-	ctx = context.WithValue(ctx, logger.ContextKeyLogType, "AgentGWCall")
-	ctx = context.WithValue(ctx, logger.ContextKeyServiceName, s.ServerName)
-	ctx = context.WithValue(ctx, logger.ContextKeyMethod, toolName)
-	ctx = context.WithValue(ctx, logger.ContextKeyParam, args)
-	ctx = context.WithValue(ctx, logger.ContextKeyApiLogTime, strconv.FormatInt(duration.Milliseconds(), 10))
-	ctx = context.WithValue(ctx, logger.ContextKeyResponseData, result)
-	ctx = context.WithValue(ctx, logger.ContextKeyStatusCode, statusCode)
-	ctx = context.WithValue(ctx, logger.ContextKeyMessage, message)
+	// 从context获取apiKeyName和userID
+	apiKeyName := ""
+	if val, ok := ctx.Value(logger.ContextKeyApiKeyName).(string); ok {
+		apiKeyName = val
+	}
+	userID := ""
+	if val, ok := ctx.Value(logger.ContextKeyUserID).(string); ok {
+		userID = val
+	}
 
-	// 统一进行日志输出
-	logger.LogAPICall(ctx)
+	// 直接输出日志
+	logger.Logger.Info("MCP服务日志",
+		zap.String("log_type", "AgentGWCall"),                                     // 0. 必须存在的字段 -- "AgentGWCall"
+		zap.String("user_id", userID),                                             // 1. 用户ID
+		zap.String("apikey_name", apiKeyName),                                     // 2. apikey的名称
+		zap.String("service_name", s.ServerName),                                  // 3. 访问的服务名称
+		zap.String("method", toolName),                                            // 4. 访问的服务中的工具名称
+		zap.Any("param", args),                                                    // 5. 访问服务需要的参数列表
+		zap.String("status_code", statusCode),                                     // 6. 返回给用户的状态码
+		zap.String("msg", message),                                                // 7. 返回给用户的消息
+		zap.Any("response_data", result),                                          // 8. 返回给用户的内容
+		zap.String("duration_ms", strconv.FormatInt(duration.Milliseconds(), 10)), // 9. 调用时间 -- ms
+	)
 
 	if err != nil {
 		return nil, nil, err
