@@ -103,7 +103,7 @@ func LogAPICall(ctx context.Context) {
 	durationMs := getStringFromContext(ctx, contextKeyApiLogTime)
 
 	// 按照顺序组合日志，并进行日志输出
-	Logger.Debug("MCP服务日志",
+	Logger.Info("MCP服务日志",
 		zap.String("log_type", logType),         // 0. 必须存在的字段 -- "AgentGWCall"
 		zap.String("apikey_name", apiKeyName),   // 1. apikey的名称
 		zap.String("service_name", serviceName), // 2. 访问的服务名称
