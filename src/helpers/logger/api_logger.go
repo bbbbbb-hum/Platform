@@ -9,63 +9,18 @@ import (
 // context key 类型定义，避免key冲突
 type contextKey string
 
-// 1. 日志字段key定义 -- 用于context定位
+// 日志字段key定义（导出，供其他包直接使用）
 const (
-	contextKeyLogType      contextKey = "api_log_log_type"
-	contextKeyApiKeyName   contextKey = "api_log_apikey_name"
-	contextKeyServiceName  contextKey = "api_log_service_name"
-	contextKeyMethod       contextKey = "api_log_method"
-	contextKeyParam        contextKey = "api_log_param"
-	contextKeyStatusCode   contextKey = "api_log_status_code"
-	contextKeyMessage      contextKey = "api_log_message"
-	contextKeyResponseData contextKey = "api_log_response_data"
-	contextKeyApiLogTime   contextKey = "api_log_duration_ms"
+	ContextKeyLogType      contextKey = "api_log_log_type"
+	ContextKeyApiKeyName   contextKey = "api_log_apikey_name"
+	ContextKeyServiceName  contextKey = "api_log_service_name"
+	ContextKeyMethod       contextKey = "api_log_method"
+	ContextKeyParam        contextKey = "api_log_param"
+	ContextKeyStatusCode   contextKey = "api_log_status_code"
+	ContextKeyMessage      contextKey = "api_log_message"
+	ContextKeyResponseData contextKey = "api_log_response_data"
+	ContextKeyApiLogTime   contextKey = "api_log_duration_ms"
 )
-
-// SetLogType 设置日志类型到context
-func SetLogType(ctx context.Context, logType string) context.Context {
-	return context.WithValue(ctx, contextKeyLogType, logType)
-}
-
-// SetApiKeyName 设置apikey名称到context
-func SetApiKeyName(ctx context.Context, apiKeyName string) context.Context {
-	return context.WithValue(ctx, contextKeyApiKeyName, apiKeyName)
-}
-
-// SetServiceName 设置服务名称到context
-func SetServiceName(ctx context.Context, serviceName string) context.Context {
-	return context.WithValue(ctx, contextKeyServiceName, serviceName)
-}
-
-// SetMethod 设置方法名称到context
-func SetMethod(ctx context.Context, method string) context.Context {
-	return context.WithValue(ctx, contextKeyMethod, method)
-}
-
-// SetParam 设置参数到context
-func SetParam(ctx context.Context, param interface{}) context.Context {
-	return context.WithValue(ctx, contextKeyParam, param)
-}
-
-// SetStatusCode 设置状态码到context
-func SetStatusCode(ctx context.Context, statusCode string) context.Context {
-	return context.WithValue(ctx, contextKeyStatusCode, statusCode)
-}
-
-// SetMessage 设置消息到context
-func SetMessage(ctx context.Context, message string) context.Context {
-	return context.WithValue(ctx, contextKeyMessage, message)
-}
-
-// SetResponseData 设置响应数据到context
-func SetResponseData(ctx context.Context, responseData interface{}) context.Context {
-	return context.WithValue(ctx, contextKeyResponseData, responseData)
-}
-
-// SetApiLogTime 设置调用耗时到context
-func SetApiLogTime(ctx context.Context, durationMs string) context.Context {
-	return context.WithValue(ctx, contextKeyApiLogTime, durationMs)
-}
 
 // getStringFromContext 从context获取string值
 func getStringFromContext(ctx context.Context, key contextKey) string {
@@ -80,9 +35,9 @@ func getInterfaceFromContext(ctx context.Context, key contextKey) interface{} {
 	return ctx.Value(key)
 }
 
-// 2. 从context中获取不同的字段，并进行日志输出
+// LogAPICall 从context获取所有字段并打印API调用日志
 func LogAPICall(ctx context.Context) {
-	method := getStringFromContext(ctx, contextKeyMethod)
+	method := getStringFromContext(ctx, ContextKeyMethod)
 
 	// 只有method字段不为空时，才说明是工具调用，才打印日志
 	if method == "" {
@@ -90,17 +45,17 @@ func LogAPICall(ctx context.Context) {
 	}
 
 	// 获取所有字段值
-	logType := getStringFromContext(ctx, contextKeyLogType)
+	logType := getStringFromContext(ctx, ContextKeyLogType)
 	if logType == "" {
 		logType = "AgentGWCall"
 	}
-	apiKeyName := getStringFromContext(ctx, contextKeyApiKeyName)
-	serviceName := getStringFromContext(ctx, contextKeyServiceName)
-	param := getInterfaceFromContext(ctx, contextKeyParam)
-	statusCode := getStringFromContext(ctx, contextKeyStatusCode)
-	message := getStringFromContext(ctx, contextKeyMessage)
-	responseData := getInterfaceFromContext(ctx, contextKeyResponseData)
-	durationMs := getStringFromContext(ctx, contextKeyApiLogTime)
+	apiKeyName := getStringFromContext(ctx, ContextKeyApiKeyName)
+	serviceName := getStringFromContext(ctx, ContextKeyServiceName)
+	param := getInterfaceFromContext(ctx, ContextKeyParam)
+	statusCode := getStringFromContext(ctx, ContextKeyStatusCode)
+	message := getStringFromContext(ctx, ContextKeyMessage)
+	responseData := getInterfaceFromContext(ctx, ContextKeyResponseData)
+	durationMs := getStringFromContext(ctx, ContextKeyApiLogTime)
 
 	// 按照顺序组合日志，并进行日志输出
 	Logger.Info("MCP服务日志",
