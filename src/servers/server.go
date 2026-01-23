@@ -255,10 +255,13 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		message = err.Error()
 	} else {
 		// 2. 工具链调用正确，直接从结构体中获取isError和message
-		if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
-			message = textContent.Text
-		}
 		isError = result.IsError
+		// 只有当isError为true时才设置message
+		if isError && len(result.Content) > 0 {
+			if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
+				message = textContent.Text
+			}
+		}
 	}
 
 	// 从context获取apiKeyName和userID
