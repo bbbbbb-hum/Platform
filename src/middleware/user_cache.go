@@ -19,6 +19,21 @@ type userCacheEntry struct {
 	expiresAt   time.Time
 }
 
+var globalUserCache *UserCache
+
+// SetGlobalUserCache registers a process-wide user cache.
+func SetGlobalUserCache(cache *UserCache) {
+	if cache == nil {
+		return
+	}
+	globalUserCache = cache
+}
+
+// GetGlobalUserCache returns the process-wide user cache, if set.
+func GetGlobalUserCache() *UserCache {
+	return globalUserCache
+}
+
 // UserCache is a small cache for apiKey -> (userID, keyID).
 // It is independent from AuthMiddleware and can be shared by multiple checkers.
 type UserCache struct {

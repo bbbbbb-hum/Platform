@@ -38,12 +38,16 @@ func (s *StatisticPreNode) GetTools(rc *types.RunningContext) (currentToolList [
 	return
 }
 
-// Process 处理工具调用 - 空节点什么都不做
+// Process 处理工具调用 - 处理调用工具前置信息
 func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
 		currentResp = lastStepResp
 	}
+	// 计算计费信息
+	// 获取服务价格信息
+	// 获取账户信息
+	// 对比价格
 	// 统计调用次数
 	var serviceModel = &models.AeMcpServices{}
 	err = serviceModel.UpdateCallNum(s.NodeInfo.ServiceID)

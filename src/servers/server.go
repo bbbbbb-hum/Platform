@@ -239,5 +239,6 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return result, result.StructuredContent, nil
 }

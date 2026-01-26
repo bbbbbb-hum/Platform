@@ -31,6 +31,7 @@ func NewAuth() *AuthMiddleware {
 	userCacheTTL := time.Duration(cacheTTLSeconds) * time.Second
 	// Negative cache TTL: 10 minutes
 	m.userCache = NewUserCache(userCacheTTL, 10*time.Minute)
+	SetGlobalUserCache(m.userCache)
 
 	// 每 10 分钟同步一次用量到数据库
 	m.limiter = NewLimitChecker(m.userCache)
@@ -65,6 +66,7 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		logger.Info(fmt.Sprintf("Authentication successful for request %s %s", r.Method, r.URL.Path))
+		
 		next(w, r)
 	}
 }

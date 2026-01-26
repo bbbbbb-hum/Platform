@@ -82,6 +82,8 @@ func main() {
 	boot.SetupLogger()
 	// 初始化 DB
 	boot.SetupDB()
+	// 初始化 Redis
+	boot.SetupRedis()
 
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
@@ -205,6 +207,5 @@ func main() {
 	} else {
 		logger.Info("HTTP服务器关闭完成")
 	}
-
 	logger.Info("服务已安全退出")
 }
