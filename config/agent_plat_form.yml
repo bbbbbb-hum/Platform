@@ -19,7 +19,7 @@ DB_PASSWORD: //数据库密码
 DB_MAX_IDLE_CONNECTIONS: 10 //数据库最大空闲连接数
 DB_MAX_OPEN_CONNECTIONS: 20 //数据库最大打开连接数
 DB_MAX_LIFE_SECONDS: 300 //数据库连接最大生命周期
-DB_SSL_MODE: disable //数据库SSL模式
+DB_SSLMODE: disable //数据库SSL模式
   
 LOG_LEVEL: debug //日志等级
 LOG_TYPE: console //日志类型 只有一个 console 选项
