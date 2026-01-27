@@ -30,7 +30,7 @@ func init() {
 				"database": config.Env("DB_DATABASE", "pgsql"),
 				"username": config.Env("DB_USERNAME", ""),
 				"password": config.Env("DB_PASSWORD", ""),
-				"sslmode":  "disable",
+				"sslmode":  config.Env("DB_SSL_MODE", "prefer"),
 
 				// 连接池配置
 				"max_idle_connections": config.Env("DB_MAX_IDLE_CONNECTIONS", 100),

@@ -40,12 +40,14 @@ func SetupDB() {
 
 	case "postgres":
 		// 构建 DSN 信息
-		dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable TimeZone=Asia/Shanghai",
+		dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=%v TimeZone=%v",
 			config.Get("database.postgres.host"),
 			config.Get("database.postgres.username"),
 			config.Get("database.postgres.password"),
 			config.Get("database.postgres.database"),
 			config.Get("database.postgres.port"),
+			config.Get("database.postgres.sslmode"),
+			config.Get("server.timezone"),
 		)
 		logger.Info("dsn", zap.String("type", "postgres"), zap.String("dsn", dsn))
 		dbConfig = postgres.New(postgres.Config{
