@@ -49,7 +49,14 @@ func SetupDB() {
 			config.Get("database.postgres.sslmode"),
 			config.Get("server.timezone"),
 		)
-		logger.Info("dsn", zap.String("type", "postgres"), zap.String("dsn", dsn))
+		//logger.Info("dsn", zap.String("type", "postgres"), zap.String("dsn", dsn))
+		logger.Info("dsn参数",
+			zap.String("host", config.Get("database.postgres.host")),
+			zap.String("username", config.Get("database.postgres.username")),
+			zap.String("database", config.Get("database.postgres.database")),
+			zap.String("port", config.Get("database.postgres.port")),
+			zap.String("sslmode", config.Get("database.postgres.sslmode")),
+			zap.String("timezone", config.Get("server.timezone")))
 		dbConfig = postgres.New(postgres.Config{
 			DSN:                  dsn,
 			PreferSimpleProtocol: true, // disables implicit prepared statement usage
