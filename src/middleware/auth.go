@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers"
+	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
@@ -51,11 +53,28 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		// 使用 Header API Key
 		apiKey := r.Header.Get(a.HeaderKey)
 
+		// 获取apikey名称和userID
+		apiKeyName := ""
+		userID := ""
+		if a.userCache != nil {
+			uid, _, keyName, _, _ := a.userCache.Get(apiKey)
+			apiKeyName = keyName
+			userID = uid
+		}
+
 		// 验证API密钥
 		if !a.ValidateAPIKey(apiKey) {
 			logger.Error(fmt.Sprintf("Authentication failed for request %s %s", r.Method, r.URL.Path))
 			http.Error(w, "Unauthorized: API key is invalid or expired. Please use a different API key, or retry after 10 minutes.", http.StatusUnauthorized)
 			return
+		}
+
+		// APILOG -- 将keyname和userID存入context
+		if strings.HasPrefix(r.URL.Path, "/mcp-server/") {
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, helpers.ContextKeyApiKeyName, apiKeyName)
+			ctx = context.WithValue(ctx, helpers.ContextKeyUserID, userID)
+			r = r.WithContext(ctx)
 		}
 
 		// 调用次数限制
