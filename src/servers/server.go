@@ -3,11 +3,13 @@ package servers
 import (
 	"AgentEarth_AgentPlatform/src/helpers"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	redisHelper "AgentEarth_AgentPlatform/src/helpers/redis"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/task_chain"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -154,13 +156,20 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 		}
 		// 新增工具
 		toolModel := models.AeMcpTools{
-			Id:          0,
-			ServiceId:   service.Id,
-			Name:        tool.ToolName,
-			Description: tool.ToolDesc,
-			ArgsSchema:  schemaMap,
-			CreateTime:  time.Now(),
-			UpdateTime:  time.Now(),
+			Id:            0,
+			ServiceId:     service.Id,
+			Name:          tool.ToolName,
+			Description:   tool.ToolDesc,
+			ArgsSchema:    schemaMap,
+			CreateTime:    time.Now(),
+			UpdateTime:    time.Now(),
+			XlcreditPrice: service.XlcreditPrice,
+		}
+		// 缓存工具调用价格到Redis
+		toolsPriceKey := redisHelper.BuildKey("tools_price", service.ServerId, tool.ToolName)
+		err = redisHelper.SetString(context.Background(), toolsPriceKey, fmt.Sprintf("%f", service.XlcreditPrice), 0)
+		if err != nil {
+			logger.Error("设置工具价格失败", zap.Error(err))
 		}
 		toolModelList = append(toolModelList, &toolModel)
 	}
@@ -196,7 +205,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 获取调用次数上限与tokens
 	var serviceLimitModel = &models.AeMcpServicesLimit{}
 	err = serviceLimitModel.GetOneByServerId(service.ServerId)
-	if err != nil {
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error("获取服务调用限制失败", zap.Error(err))
 	}
 	server.LimitType = serviceLimitModel.LimitType

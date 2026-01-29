@@ -86,6 +86,38 @@ func Close() error {
 	return err
 }
 
+// GetString returns the value of key as a string.
+// Call BuildKey(...) beforehand if you want automatic prefixing.
+func GetString(ctx context.Context, key string) (string, error) {
+	if key == "" {
+		return "", errors.New("redis key is empty")
+	}
+	c := Client()
+	if c == nil {
+		return "", errors.New("redis client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.Get(ctx, key).Result()
+}
+
+// SetString sets the value of key with an optional TTL (0 means no expiration).
+// Call BuildKey(...) beforehand if you want automatic prefixing.
+func SetString(ctx context.Context, key, value string, ttl time.Duration) error {
+	if key == "" {
+		return errors.New("redis key is empty")
+	}
+	c := Client()
+	if c == nil {
+		return errors.New("redis client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.Set(ctx, key, value, ttl).Err()
+}
+
 // BuildKey builds a namespaced Redis key with the configured prefix.
 func BuildKey(parts ...string) string {
 	clientMu.RLock()
