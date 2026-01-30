@@ -1,6 +1,7 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/cache"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/types"
@@ -44,10 +45,29 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 	if lastStepResp != nil {
 		currentResp = lastStepResp
 	}
-	// 计算计费信息
-	// 获取服务价格信息
+	// 获取工具价格信息
+	toolsPriceKey := cache.GetToolsPriceKey(rc.ServiceID, userCmd)
+	toolsPrice := cache.GetToolsPrice(toolsPriceKey)
 	// 获取账户信息
+	userId := rc.Stats["user_id"].(string)
+	keyId := rc.Stats["key_id"].(int64)
+	userBalanceKey := cache.GetUserBalanceKey(userId)
+	userBalance := cache.GetUserBalance(userBalanceKey)
 	// 对比价格
+	if userBalance*10000000 < toolsPrice*10000000 {
+		currentResp = &mcp.CallToolResult{
+			Meta: mcp.Meta{
+				"error": "Insufficient balance.",
+			},
+			StructuredContent: nil,
+			Content: []mcp.Content{
+				&mcp.TextContent{
+					Text: "Insufficient balance.",
+				},
+			},
+		}
+		return
+	}
 	// 统计调用次数
 	var serviceModel = &models.AeMcpServices{}
 	err = serviceModel.UpdateCallNum(s.NodeInfo.ServiceID)
@@ -56,14 +76,17 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 	}
 	// 创建统计日志 放入上下文
 	rc.Stats["log"] = &models.AeMcpServicesRequestLogs{
-		ServerId:     s.NodeInfo.ServiceID,
-		ToolName:     userCmd,
-		RequestTime:  time.Now(),
-		ReturnTime:   time.Now(),
-		ResponseTime: 0,
-		Status:       0,
-		CreateTime:   time.Now(),
-		UpdateTime:   time.Now(),
+		ServerId:       s.NodeInfo.ServiceID,
+		ToolName:       userCmd,
+		RequestTime:    time.Now(),
+		ReturnTime:     time.Now(),
+		ResponseTime:   0,
+		Status:         0,
+		CreateTime:     time.Now(),
+		UpdateTime:     time.Now(),
+		UserId:         userId,
+		KeyId:          keyId,
+		XlcreditAmount: toolsPrice,
 	}
 	return
 }

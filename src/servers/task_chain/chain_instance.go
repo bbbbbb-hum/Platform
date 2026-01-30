@@ -82,7 +82,7 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 		currentResp = &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: "未获取到结果",
+					Text: "No results obtained.",
 				},
 			},
 			StructuredContent: nil,

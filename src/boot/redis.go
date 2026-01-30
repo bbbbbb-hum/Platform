@@ -4,16 +4,17 @@ import (
 	"AgentEarth_AgentPlatform/src/helpers/config"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	redisHelper "AgentEarth_AgentPlatform/src/helpers/redis"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
 )
 
 // SetupRedis initializes the global Redis client.
-func SetupRedis() {
+func SetupRedis() error {
 	if !config.GetBool("redis.enable") {
 		logger.Info("Redis disabled", zap.Bool("enable", false))
-		return
+		return nil
 	}
 
 	dialTimeout := time.Duration(config.GetInt("redis.dial_timeout_seconds")) * time.Second
@@ -39,7 +40,7 @@ func SetupRedis() {
 	client, err := redisHelper.Init(cfg)
 	if err != nil {
 		logger.Error("Redis 连接失败", zap.Error(err))
-		return
+		return fmt.Errorf("Redis connection failed")
 	}
 
 	logger.Info("Redis 连接成功",
@@ -48,4 +49,5 @@ func SetupRedis() {
 		zap.String("prefix", cfg.Prefix),
 		zap.Bool("client_ready", client != nil),
 	)
+	return nil
 }

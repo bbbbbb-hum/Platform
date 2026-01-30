@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -54,12 +53,11 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// APILOG -- 将keyname和userID存入context
-		if strings.HasPrefix(r.URL.Path, "/mcp-server/") {
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, helpers.ContextKeyApiKeyName, info.KeyName)
-			ctx = context.WithValue(ctx, helpers.ContextKeyUserID, info.UserID)
-			r = r.WithContext(ctx)
-		}
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, helpers.ContextKeyApiKeyName, info.KeyName)
+		ctx = context.WithValue(ctx, helpers.ContextKeyUserID, info.UserID)
+		ctx = context.WithValue(ctx, "key_id", info.KeyID)
+		r = r.WithContext(ctx)
 
 		// 调用次数限制
 		serverID := helpers.ExtractServerID(r.URL.Path)

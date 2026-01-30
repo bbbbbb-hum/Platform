@@ -81,10 +81,17 @@ func main() {
 	// 初始化 Logger
 	boot.SetupLogger()
 	// 初始化 DB
-	boot.SetupDB()
+	err := boot.SetupDB()
+	if err != nil {
+		logger.Error("初始化DB失败", zap.Error(err))
+		return
+	}
 	// 初始化 Redis
-	boot.SetupRedis()
-
+	err = boot.SetupRedis()
+	if err != nil {
+		logger.Error("初始化Redis失败", zap.Error(err))
+		return
+	}
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
 	if err := servers.Initialize(); err != nil {
