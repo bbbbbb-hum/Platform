@@ -245,7 +245,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	if !ok {
 		return nil, nil, errors.New("user information not obtained")
 	}
-	keyId, ok := ctx.Value("key_id").(string)
+	keyId, ok := ctx.Value("key_id").(int64)
 	if !ok {
 		return nil, nil, errors.New("key_id not obtained")
 	}

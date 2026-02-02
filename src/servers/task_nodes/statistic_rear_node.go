@@ -65,7 +65,7 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 	requestLogModel.Status = 1
 	requestLogModel.UpdateTime = time.Now()
 
-	// 将更新后的日志加入批量插入队列
+	// 将日志添加到缓冲池，由池统一批量发布到 NATS（或降级写入数据库）
 	pools.GetRequestLogsPool().Add(requestLogModel)
 	return
 }

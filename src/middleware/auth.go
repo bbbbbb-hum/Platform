@@ -56,7 +56,7 @@ func (a *AuthMiddleware) Auth(next http.HandlerFunc) http.HandlerFunc {
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, helpers.ContextKeyApiKeyName, info.KeyName)
 		ctx = context.WithValue(ctx, helpers.ContextKeyUserID, info.UserID)
-		ctx = context.WithValue(ctx, "key_id", info.KeyID)
+		ctx = context.WithValue(ctx, "key_id", int64(info.KeyID))
 		r = r.WithContext(ctx)
 
 		// 调用次数限制
