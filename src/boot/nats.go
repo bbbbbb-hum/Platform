@@ -78,7 +78,7 @@ func initNatsConnection() error {
 	}
 
 	// 确保 Stream 存在
-	if err := ensureStream(js); err != nil {
+	if err = ensureStream(js); err != nil {
 		nc.Close()
 		return err
 	}
@@ -91,7 +91,7 @@ func initNatsConnection() error {
 
 	logger.Info("NATS 连接成功",
 		zap.String("url", url),
-		zap.String("stream", config.GetString("nats.stream_name")),
+		zap.String("stream", GetJetStreamName()),
 		zap.String("subject", config.GetString("nats.subject")),
 	)
 
@@ -100,7 +100,7 @@ func initNatsConnection() error {
 
 // ensureStream 确保 JetStream Stream 存在
 func ensureStream(js nats.JetStreamContext) error {
-	streamName := config.GetString("nats.stream_name")
+	streamName := GetJetStreamName()
 	subject := config.GetString("nats.subject")
 	maxMsgs := config.GetInt64("nats.stream_max_msgs")
 	maxBytes := config.GetInt64("nats.stream_max_bytes")
@@ -169,6 +169,10 @@ func IsNatsEnabled() bool {
 	natsMutex.RLock()
 	defer natsMutex.RUnlock()
 	return natsEnable && natsConn != nil && natsConn.IsConnected()
+}
+
+func GetJetStreamName() string {
+	return config.GetString("server.namespace") + "_" + config.GetString("nats.stream_name")
 }
 
 // GetNatsSubject 获取配置的发布主题

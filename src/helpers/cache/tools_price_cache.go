@@ -3,7 +3,7 @@ package cache
 import (
 	redisHelper "AgentEarth_AgentPlatform/src/helpers/redis"
 	"context"
-	"fmt"
+	"strconv"
 )
 
 // 获取工具价格key
@@ -18,13 +18,16 @@ func GetToolsPrice(key string) float64 {
 		return 0 // 如果获取失败，返回默认值0
 	}
 
-	var price float64
-	fmt.Sscanf(value, "%f", &price) // 将字符串转换为float64
+	price, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
 
 	return price
 }
 
 // 缓存工具价格
 func SetToolsPrice(key string, value float64) error {
-	return redisHelper.SetString(context.Background(), key, fmt.Sprintf("%f", value), 0)
+	// 使用 'f' 格式保持普通小数形式，精度 8 位与数据库一致
+	return redisHelper.SetString(context.Background(), key, strconv.FormatFloat(value, 'f', 8, 64), 0)
 }

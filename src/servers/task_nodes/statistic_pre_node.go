@@ -5,9 +5,11 @@ import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/types"
+	"fmt"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -52,9 +54,11 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 	userId := rc.Stats["user_id"].(string)
 	keyId := rc.Stats["key_id"].(int64)
 	userBalanceKey := cache.GetUserBalanceKey(userId)
-	userBalance := cache.GetUserBalance(userBalanceKey)
-	// 对比价格
-	if userBalance*10000000 < toolsPrice*10000000 {
+	userBalance := cache.GetUserBalance(userBalanceKey, userId)
+	// 对比价格（使用 decimal 避免浮点精度问题）
+	userBalanceDec := decimal.NewFromFloat(userBalance)
+	toolsPriceDec := decimal.NewFromFloat(toolsPrice)
+	if userBalanceDec.LessThan(toolsPriceDec) {
 		currentResp = &mcp.CallToolResult{
 			Meta: mcp.Meta{
 				"error": "Insufficient balance.",
@@ -66,6 +70,7 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 				},
 			},
 		}
+		err = fmt.Errorf("%s 账户余额不足~", userId)
 		return
 	}
 	// 统计调用次数

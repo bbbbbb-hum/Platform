@@ -95,7 +95,8 @@ func main() {
 	}
 	// 初始化 NATS（可选，失败不影响服务启动，会降级到数据库直写模式）
 	if err = boot.SetupNats(); err != nil {
-		logger.Warn("初始化NATS失败，将使用数据库直写模式", zap.Error(err))
+		logger.Warn("初始化NATS失败,请查询配置文件，并检查NATS服务是否正常启动", zap.Error(err))
+		return
 	}
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
@@ -111,21 +112,10 @@ func main() {
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
-	// 启动请求日志批量插入协程（每分钟同步一次）
+	// 启动请求日志批量插入协程（每分钟同步一次） 暂时不使用
 	// 该协程会检查 NATS 可用性，启用 NATS 时发布到消息队列，否则降级到数据库直写
-	pools.GetRequestLogsPool().Start(60 * time.Second)
+	//pools.GetRequestLogsPool().Start(60 * time.Second)
 
-	// 启动消费者（先放这里，后面消费者移动到其他项目）
-	// 只有当 NATS 可用时才启动消费者
-	if mq.IsNatsAvailable() {
-		err = mq.GetRequestLogsConsumer().Start(mq.BatchInsertHandler)
-		if err != nil {
-			logger.Error("启动 NATS 消费者失败", zap.Error(err))
-			return
-		}
-	} else {
-		logger.Warn("NATS 不可用，消费者未启动，日志池将使用数据库直写模式")
-	}
 	// 初始化 mcp 服务
 	httpStreamableHandler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
 		path := request.URL.Path
@@ -226,9 +216,6 @@ func main() {
 
 	// 如果 NATS 可用，先停止消费者再关闭连接
 	if mq.IsNatsAvailable() {
-		logger.Info("正在停止 NATS 消费者...")
-		mq.GetRequestLogsConsumer().Stop()
-
 		logger.Info("正在关闭 NATS 连接...")
 		boot.CloseNats()
 		logger.Info("NATS 连接关闭完成")

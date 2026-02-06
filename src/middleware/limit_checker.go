@@ -6,7 +6,6 @@ import (
 	"time"
 
 	cacheHelper "AgentEarth_AgentPlatform/src/helpers/cache"
-	userModels "AgentEarth_AgentPlatform/src/models/users"
 	"AgentEarth_AgentPlatform/src/servers"
 )
 
@@ -92,7 +91,7 @@ func (c *LimitChecker) CheckUsage(apiKey, serverID string) bool {
 	}
 
 	limitType := int(serverInfo.LimitType)
-	periodKey, periodStart, periodEndExcl, ok := periodFor(limitType, now)
+	periodKey, _, periodEndExcl, ok := periodFor(limitType, now)
 	if !ok {
 		return true
 	}
@@ -102,22 +101,8 @@ func (c *LimitChecker) CheckUsage(apiKey, serverID string) bool {
 		return true
 	}
 	userID := userKeyinfo.UserID
-	keyID := userKeyinfo.KeyID
 
 	usageTTL := ttlUntil(periodEndExcl, time.Hour)
-	baseKey := cacheHelper.KeyUsageUserPeriod(userID, serverID, periodKey)
-	_, exists, err := cacheHelper.GetUsageBase(context.Background(), baseKey)
-	if err != nil {
-		return true
-	}
-	if !exists {
-		existingUserCalls, err := userModels.GetUserCallsSumByUSRange(userID, serverID, periodStart, periodEndExcl)
-		if err != nil {
-			return true
-		}
-		_, _ = cacheHelper.SetUsageBaseIfAbsent(context.Background(), baseKey, existingUserCalls, usageTTL)
-	}
-
 	allowed, err := cacheHelper.CheckAndIncrUsage(context.Background(), userID, serverID, periodKey, limit, usageTTL)
 	if err != nil {
 		return true
@@ -126,9 +111,6 @@ func (c *LimitChecker) CheckUsage(apiKey, serverID string) bool {
 		return false
 	}
 
-	year, month, day := int16(now.Year()), int16(now.Month()), int16(now.Day())
-	dayKey := yyyymmddKey(year, month, day)
-	_, _ = cacheHelper.IncrUsageDayAndMarkDirty(context.Background(), userID, keyID, serverID, dayKey, 72*time.Hour)
 	return true
 }
 

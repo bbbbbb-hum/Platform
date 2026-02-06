@@ -13,7 +13,7 @@ import (
 
 // RequestLogsBatch 请求日志批次消息格式
 type RequestLogsBatch struct {
-	Count int                                 `json:"count"` // 日志数量
+	Count int                                `json:"count"` // 日志数量
 	Logs  []*models.AeMcpServicesRequestLogs `json:"logs"`  // 日志列表
 }
 
@@ -87,4 +87,43 @@ func PublishRequestLogsAsync(logs []*models.AeMcpServicesRequestLogs) {
 // IsNatsAvailable 检查 NATS 是否可用
 func IsNatsAvailable() bool {
 	return boot.IsNatsEnabled()
+}
+
+// PublishRequestLog 发布单条日志到 NATS
+func PublishRequestLog(reqLog *models.AeMcpServicesRequestLogs) error {
+	if reqLog == nil {
+		return nil
+	}
+
+	if !boot.IsNatsEnabled() {
+		return ErrNatsNotEnabled
+	}
+
+	js := boot.GetJetStream()
+	if js == nil {
+		return ErrJetStreamNotAvailable
+	}
+
+	// 序列化为 JSON
+	data, err := json.Marshal(reqLog)
+	if err != nil {
+		logger.Error("序列化请求日志失败", zap.Error(err))
+		return err
+	}
+
+	// 发布到 JetStream
+	subject := boot.GetNatsSubject()
+	ack, err := js.Publish(subject, data, nats.AckWait(5*time.Second))
+	if err != nil {
+		logger.Error("发布请求日志到 NATS 失败",
+			zap.String("subject", subject),
+			zap.Error(err))
+		return err
+	}
+
+	logger.Debug("发布请求日志到 NATS 成功",
+		zap.String("subject", subject),
+		zap.Uint64("sequence", ack.Sequence))
+
+	return nil
 }

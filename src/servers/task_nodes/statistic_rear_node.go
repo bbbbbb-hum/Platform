@@ -2,8 +2,8 @@ package task_nodes
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/helpers/mq"
 	"AgentEarth_AgentPlatform/src/models"
-	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
 	"time"
@@ -66,7 +66,15 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 	requestLogModel.UpdateTime = time.Now()
 
 	// 将日志添加到缓冲池，由池统一批量发布到 NATS（或降级写入数据库）
-	pools.GetRequestLogsPool().Add(requestLogModel)
+	//pools.GetRequestLogsPool().Add(requestLogModel)
+	err = mq.PublishRequestLog(requestLogModel)
+	if err != nil {
+		logger.Error("发布请求日志到 NATS 失败", zap.Error(err))
+		// 发布失败，记录到错误日志便于后续补录
+		logger.Error("NATS 发布失败，日志已记录", zap.Any("miss_request_logs", requestLogModel))
+	} else {
+		logger.Debug("发布请求日志到 NATS 成功")
+	}
 	return
 }
 
