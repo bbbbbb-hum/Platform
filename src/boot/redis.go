@@ -19,7 +19,6 @@ func SetupRedis() error {
 
 	cfg := redisHelper.Config{
 		Addr:         config.GetString("redis.addr"),
-		Username:     "",
 		Password:     config.GetString("redis.password"),
 		DB:           config.GetInt("redis.db"),
 		PoolSize:     config.GetInt("redis.pool_size"),
@@ -31,7 +30,7 @@ func SetupRedis() error {
 		PoolTimeout:  poolTimeout,
 		Prefix:       config.GetString("redis.prefix"),
 	}
-
+	logger.Info("Redis配置", zap.Any("config", cfg))
 	client, err := redisHelper.Init(cfg)
 	if err != nil {
 		logger.Error("Redis 连接失败", zap.Error(err))
