@@ -25,7 +25,7 @@ func init() {
 			"auth_key":       config.Env("SERVER_AUTH_KEY", ""),
 			"auth_cache_ttl": config.Env("SERVER_AUTH_CACHE_TTL", 300),
 
-			"namespace": config.Env("SERVER_NAMESPACE", "local-dev"),
+			"namespace": config.Env("NAMESPACE", "local-dev"),
 		}
 	})
 }
