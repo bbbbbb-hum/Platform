@@ -12,11 +12,6 @@ import (
 
 // SetupRedis initializes the global Redis client.
 func SetupRedis() error {
-	if !config.GetBool("redis.enable") {
-		logger.Info("Redis disabled", zap.Bool("enable", false))
-		return nil
-	}
-
 	dialTimeout := time.Duration(config.GetInt("redis.dial_timeout_seconds")) * time.Second
 	readTimeout := time.Duration(config.GetInt("redis.read_timeout_seconds")) * time.Second
 	writeTimeout := time.Duration(config.GetInt("redis.write_timeout_seconds")) * time.Second
@@ -24,7 +19,7 @@ func SetupRedis() error {
 
 	cfg := redisHelper.Config{
 		Addr:         config.GetString("redis.addr"),
-		Username:     config.GetString("redis.username"),
+		Username:     "",
 		Password:     config.GetString("redis.password"),
 		DB:           config.GetInt("redis.db"),
 		PoolSize:     config.GetInt("redis.pool_size"),

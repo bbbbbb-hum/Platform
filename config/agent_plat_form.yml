@@ -25,9 +25,7 @@ DB_SSLMODE: disable #数据库SSL模式
 LOG_LEVEL: debug #日志等级
 LOG_TYPE: console #日志类型 只有一个 console 选项
 
-REDIS_ENABLE: true #redis开关
 REDIS_ADDR: 127.0.0.1:6379 #redis地址
-REDIS_USERNAME: #redis用户名
 REDIS_PASSWORD: #redis密码
 REDIS_DB: 0 #redis数据库
 REDIS_POOL_SIZE: 10 #redis连接池大小
@@ -39,7 +37,6 @@ REDIS_WRITE_TIMEOUT_SECONDS: 3 #redis写入超时
 REDIS_POOL_TIMEOUT_SECONDS: 5 #redis连接池超时时间
 REDIS_PREFIX: ae #redis前缀
 
-NATS_ENABLE: true #NATS开关
 NATS_URL: nats://localhost:4222 #NATS地址，K8s中使用 nats://nats.default.svc.cluster.local:4222
 NATS_STREAM_NAME: REQUEST_LOGS #JetStream流名称
 NATS_SUBJECT: logs.request #发布主题

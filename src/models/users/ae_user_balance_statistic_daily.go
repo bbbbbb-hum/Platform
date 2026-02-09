@@ -58,10 +58,12 @@ func (l *AeUserBalanceStatisticDaily) AddTodayBalance(userId string) (float64, e
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		balanceDaily = AeUserBalanceStatisticDaily{
+
 			UserId:  userId,
 			Balance: 0,
 		}
 	}
+	balanceDaily.Id = 0
 	balanceDaily.Day = time.Now()
 	balanceDaily.CreateTime = time.Now()
 	balanceDaily.UpdateTime = time.Now()

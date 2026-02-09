@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/config"
 	"context"
 	"errors"
 	"strings"
@@ -12,23 +13,23 @@ import (
 
 // Config holds Redis connection settings.
 type Config struct {
-	Addr        string
-	Username    string
-	Password    string
-	DB          int
-	PoolSize    int
+	Addr         string
+	Username     string
+	Password     string
+	DB           int
+	PoolSize     int
 	MinIdleConns int
-	MaxRetries  int
-	DialTimeout time.Duration
-	ReadTimeout time.Duration
+	MaxRetries   int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
-	PoolTimeout time.Duration
-	Prefix      string
+	PoolTimeout  time.Duration
+	Prefix       string
 }
 
 var (
-	client   *redislib.Client
-	clientMu sync.RWMutex
+	client    *redislib.Client
+	clientMu  sync.RWMutex
 	keyPrefix string
 )
 
@@ -142,5 +143,5 @@ func BuildKey(parts ...string) string {
 }
 
 func normalizePrefix(prefix string) string {
-	return strings.Trim(prefix, ":")
+	return config.GetString("server.namespace") + "_" + strings.Trim(prefix, ":")
 }

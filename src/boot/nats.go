@@ -21,11 +21,6 @@ var (
 
 // SetupNats 初始化 NATS 连接和 JetStream
 func SetupNats() error {
-	if !config.GetBool("nats.enable") {
-		logger.Info("NATS disabled", zap.Bool("enable", false))
-		return nil
-	}
-
 	var setupErr error
 	natsOnce.Do(func() {
 		setupErr = initNatsConnection()
