@@ -14,7 +14,6 @@ import (
 // Config holds Redis connection settings.
 type Config struct {
 	Addr         string
-	Username     string
 	Password     string
 	DB           int
 	PoolSize     int
@@ -41,7 +40,6 @@ func Init(cfg Config) (*redislib.Client, error) {
 
 	opts := &redislib.Options{
 		Addr:         cfg.Addr,
-		Username:     cfg.Username,
 		Password:     cfg.Password,
 		DB:           cfg.DB,
 		PoolSize:     cfg.PoolSize,
