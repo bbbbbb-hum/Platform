@@ -85,24 +85,24 @@ func main() {
 	err := boot.SetupDB()
 	if err != nil {
 		logger.Error("初始化DB失败", zap.Error(err))
-		return
+		//return
 	}
 	// 初始化 Redis
 	err = boot.SetupRedis()
 	if err != nil {
 		logger.Error("初始化Redis失败", zap.Error(err))
-		return
+		//return
 	}
 	// 初始化 NATS（可选，失败不影响服务启动，会降级到数据库直写模式）
 	if err = boot.SetupNats(); err != nil {
 		logger.Warn("初始化NATS失败,请查询配置文件，并检查NATS服务是否正常启动", zap.Error(err))
-		return
+		//return
 	}
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
 	if err := servers.Initialize(); err != nil {
 		logger.Error("初始化MCP服务失败", zap.Error(err))
-		return
+		//return
 	}
 
 	// 初始化 Prometheus Metrics
