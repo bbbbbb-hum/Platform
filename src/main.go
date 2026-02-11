@@ -101,7 +101,7 @@ func main() {
 	// 启动 NATS 消费者（批量消费日志并插入数据库）
 	if err = mq.GetRequestLogsConsumer().Start(); err != nil {
 		logger.Error("启动 NATS 消费者失败", zap.Error(err))
-		return
+		//return
 	}
 
 	// 初始化 MCP 服务映射表

@@ -50,9 +50,9 @@ func (c *RequestLogsConsumer) Start() error {
 		return ErrJetStreamNotAvailable
 	}
 
-	streamName := config.GetString("nats.stream_name")
+	streamName := boot.GetJetStreamName()
 	subject := boot.GetNatsSubject()
-	consumerName := "request-logs-consumer"
+	consumerName := config.GetString("server.namespace") + "_consumer"
 
 	// 创建持久化消费者
 	sub, err := js.PullSubscribe(

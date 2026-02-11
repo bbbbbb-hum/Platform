@@ -9,8 +9,6 @@ import (
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
 	redisHelper "AgentEarth_AgentPlatform/src/helpers/redis"
 	userModels "AgentEarth_AgentPlatform/src/models/users"
-
-	redislib "github.com/redis/go-redis/v9"
 )
 
 // GetUserKeyInfo returns user info for the apiKey.
@@ -22,23 +20,24 @@ func GetUserKeyInfo(ctx context.Context, apiKey string) (*UserKeyInfo, error) {
 	}
 	// 1) cache
 	key := KeyUserKey(apiKey)
-	val, err := redisHelper.GetString(ctx, key)
-	if err == nil {
+	val, ok, err := redisHelper.GetString(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
 		var info UserKeyInfo
 		if jsonErr := json.Unmarshal([]byte(val), &info); jsonErr == nil {
 			return &info, nil
 		}
-	} else if err != redislib.Nil {
-		return nil, err
 	}
 	// 2) invalid 负缓存 30 秒 防止短时间无效apikey访问数据库
 	invalidKey := KeyUserKeyInvalid(apiKey)
-	invalidVal, invalidErr := redisHelper.GetString(ctx, invalidKey)
-	if invalidErr == nil && invalidVal != "" {
-		return nil, nil
-	}
-	if invalidErr != nil && invalidErr != redislib.Nil {
+	invalidVal, invalidOk, invalidErr := redisHelper.GetString(ctx, invalidKey)
+	if invalidErr != nil {
 		return nil, invalidErr
+	}
+	if invalidOk && invalidVal != "" {
+		return nil, nil
 	}
 
 	// 3) db fallback

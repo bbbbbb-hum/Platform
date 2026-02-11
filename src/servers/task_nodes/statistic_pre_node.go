@@ -48,37 +48,46 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 		currentResp = lastStepResp
 	}
 	// 获取工具价格信息
-	toolsPriceKey := cache.GetToolsPriceKey(rc.ServiceID, userCmd)
-	toolsPrice := cache.GetToolsPrice(toolsPriceKey)
+	toolsPrice := cache.GetToolsPrice(rc.ServiceID, userCmd)
 	// 获取账户信息
 	userId := rc.Stats["user_id"].(string)
 	keyId := rc.Stats["key_id"].(int64)
 	userBalanceKey := cache.GetUserBalanceKey(userId)
 	userBalance := cache.GetUserBalance(userBalanceKey, userId)
-	// 对比价格（使用 decimal 避免浮点精度问题）
-	userBalanceDec := decimal.NewFromFloat(userBalance)
-	toolsPriceDec := decimal.NewFromFloat(toolsPrice)
-	if userBalanceDec.LessThan(toolsPriceDec) {
-		currentResp = &mcp.CallToolResult{
-			Meta: mcp.Meta{
-				"error": "Insufficient balance.",
-			},
-			StructuredContent: nil,
-			Content: []mcp.Content{
-				&mcp.TextContent{
-					Text: "Insufficient balance.",
+
+	// 如果工具价格为0，则不进行价格对比
+	if toolsPrice > 0 {
+		// 对比价格（使用 decimal 避免浮点精度问题）
+		userBalanceDec := decimal.NewFromFloat(userBalance)
+		toolsPriceDec := decimal.NewFromFloat(toolsPrice)
+		if userBalanceDec.LessThan(toolsPriceDec) {
+			currentResp = &mcp.CallToolResult{
+				Meta: mcp.Meta{
+					"error": "Insufficient balance.",
 				},
-			},
+				StructuredContent: nil,
+				Content: []mcp.Content{
+					&mcp.TextContent{
+						Text: "Insufficient balance.",
+					},
+				},
+			}
+			err = fmt.Errorf("%s 账户余额不足~", userId)
+			return
 		}
-		err = fmt.Errorf("%s 账户余额不足~", userId)
-		return
+		// 设置用户使用量增量
+		err = cache.SetUserUsageIncrement(userId, toolsPrice)
+		if err != nil {
+			logger.Error("设置用户使用量增量失败", zap.String("user_id", userId), zap.Error(err))
+			return
+		}
 	}
-	// 统计调用次数
-	var serviceModel = &models.AeMcpServices{}
-	err = serviceModel.UpdateCallNum(s.NodeInfo.ServiceID)
-	if err != nil {
-		return
-	}
+	// 统计调用次数 (改用定时任务)
+	// var serviceModel = &models.AeMcpServices{}
+	// err = serviceModel.UpdateCallNum(s.NodeInfo.ServiceID)
+	// if err != nil {
+	// 	return
+	// }
 	// 创建统计日志 放入上下文
 	rc.Stats["log"] = &models.AeMcpServicesRequestLogs{
 		ServerId:       s.NodeInfo.ServiceID,

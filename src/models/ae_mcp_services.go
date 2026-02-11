@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"time"
 
 	"github.com/lib/pq"
@@ -38,6 +39,16 @@ func (m *AeMcpServices) GetOne(id int32) error {
 	db := GetDB()
 	return db.Where("id = ?", id).First(m).Error
 }
+
+func (m *AeMcpServices) GetOneByServerId(serverId string) (*AeMcpServices, error) {
+	var service AeMcpServices
+	err := GetDB().Where("server_id = ?", serverId).First(&service).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	return &service, nil
+}
+
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
 	db = db.Where("is_created = ?", true)

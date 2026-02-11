@@ -86,19 +86,58 @@ func Close() error {
 }
 
 // GetString returns the value of key as a string.
+// ok=true if key exists, ok=false if key does not exist.
+// err is non-nil only for real errors (connection failure, etc.).
 // Call BuildKey(...) beforehand if you want automatic prefixing.
-func GetString(ctx context.Context, key string) (string, error) {
+func GetString(ctx context.Context, key string) (value string, ok bool, err error) {
 	if key == "" {
-		return "", errors.New("redis key is empty")
+		return "", false, errors.New("redis key is empty")
 	}
 	c := Client()
 	if c == nil {
-		return "", errors.New("redis client is not initialized")
+		return "", false, errors.New("redis client is not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return c.Get(ctx, key).Result()
+	value, err = c.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redislib.Nil) {
+			return "", false, nil // key not exists, not a real error
+		}
+		return "", false, err
+	}
+	return value, true, nil
+}
+
+// IncrFloat adds delta to the value of key (creates key with 0 if not exists).
+// newKeyTTL is only applied when the key is newly created; existing keys keep their TTL.
+// Call BuildKey(...) beforehand if you want automatic prefixing.
+func IncrFloat(ctx context.Context, key string, delta float64, newKeyTTL time.Duration) error {
+	if key == "" {
+		return errors.New("redis key is empty")
+	}
+	c := Client()
+	if c == nil {
+		return errors.New("redis client is not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// GET current -> add delta -> SET -> PEXPIRE only if key was new
+	script := redislib.NewScript(`
+		local current = redis.call('GET', KEYS[1])
+		local add = tonumber(ARGV[1])
+		local ttlMs = tonumber(ARGV[2])
+		local newVal = (current and tonumber(current) or 0) + add
+		redis.call('SET', KEYS[1], tostring(newVal))
+		if not current then
+			redis.call('PEXPIRE', KEYS[1], ttlMs)
+		end
+		return tostring(newVal)
+	`)
+	ttlMs := newKeyTTL.Milliseconds()
+	return script.Run(ctx, c, []string{key}, delta, ttlMs).Err()
 }
 
 // SetString sets the value of key with an optional TTL (0 means no expiration).

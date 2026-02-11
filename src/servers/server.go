@@ -166,10 +166,9 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 			XlcreditPrice: service.XlcreditPrice,
 		}
 		// 缓存工具调用价格到Redis
-		toolsPriceKey := cache.GetToolsPriceKey(service.ServerId, tool.ToolName)
-		err = cache.SetToolsPrice(toolsPriceKey, service.XlcreditPrice)
+		err = cache.SetToolsPrice(service.ServerId, tool.ToolName, service.XlcreditPrice)
 		if err != nil {
-			logger.Error("设置工具价格失败", zap.Error(err))
+			logger.Error("设置工具价格失败", zap.String("server_id", service.ServerId), zap.String("tool_name", tool.ToolName), zap.Error(err))
 		}
 		toolModelList = append(toolModelList, &toolModel)
 	}

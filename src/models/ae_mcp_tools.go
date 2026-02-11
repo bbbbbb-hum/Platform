@@ -1,9 +1,11 @@
 package models
 
 import (
+	"errors"
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 const TableNameAeMcpTools = "ae_mcp_tools"
@@ -31,4 +33,14 @@ func (t *AeMcpTools) BatchDeleteByServiceId(ServiceId int32) error {
 // Create 新增工具
 func (t *AeMcpTools) Create() error {
 	return GetDB().Create(t).Error
+}
+
+// GetToolByServiceIdAndName 根据服务ID和工具名称获取工具
+func (t *AeMcpTools) GetToolByServiceIdAndName(serviceId int32, toolName string) (*AeMcpTools, error) {
+	var tool AeMcpTools
+	err := GetDB().Where("service_id=? AND name=?", serviceId, toolName).First(&tool).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	return &tool, nil
 }
