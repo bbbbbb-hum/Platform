@@ -98,6 +98,12 @@ func main() {
 		logger.Warn("初始化NATS失败,请查询配置文件，并检查NATS服务是否正常启动", zap.Error(err))
 		//return
 	}
+	// 启动 NATS 消费者（批量消费日志并插入数据库）
+	if err = mq.GetRequestLogsConsumer().Start(); err != nil {
+		logger.Error("启动 NATS 消费者失败", zap.Error(err))
+		return
+	}
+
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
 	if err := servers.Initialize(); err != nil {
@@ -214,12 +220,15 @@ func main() {
 	pools.GetRequestLogsPool().Stop()
 	logger.Info("连接池关闭完成")
 
-	// 如果 NATS 可用，先停止消费者再关闭连接
-	if mq.IsNatsAvailable() {
-		logger.Info("正在关闭 NATS 连接...")
-		boot.CloseNats()
-		logger.Info("NATS 连接关闭完成")
-	}
+	// 先停止 NATS 消费者（会处理完缓冲区中的数据再退出）
+	logger.Info("正在停止 NATS 消费者...")
+	mq.GetRequestLogsConsumer().Stop()
+	logger.Info("NATS 消费者已停止")
+
+	// 再关闭 NATS 连接
+	logger.Info("正在关闭 NATS 连接...")
+	boot.CloseNats()
+	logger.Info("NATS 连接关闭完成")
 
 	// 优雅关闭 HTTP 服务器
 	logger.Info("正在关闭HTTP服务器...")
