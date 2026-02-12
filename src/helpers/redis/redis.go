@@ -140,6 +140,13 @@ func IncrFloat(ctx context.Context, key string, delta float64, newKeyTTL time.Du
 	return script.Run(ctx, c, []string{key}, delta, ttlMs).Err()
 }
 
+// DecrFloat subtracts delta from the value of key (creates key with 0 if not exists).
+// newKeyTTL is only applied when the key is newly created; existing keys keep their TTL.
+// Call BuildKey(...) beforehand if you want automatic prefixing.
+func DecrFloat(ctx context.Context, key string, delta float64, newKeyTTL time.Duration) error {
+	return IncrFloat(ctx, key, -delta, newKeyTTL)
+}
+
 // SetString sets the value of key with an optional TTL (0 means no expiration).
 // Call BuildKey(...) beforehand if you want automatic prefixing.
 func SetString(ctx context.Context, key, value string, ttl time.Duration) error {

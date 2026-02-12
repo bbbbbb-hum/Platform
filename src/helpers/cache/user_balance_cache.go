@@ -73,15 +73,11 @@ func GetUserBalance(key string, userId string) float64 {
 	return balance
 }
 
-// 缓存用户余额
-func SetUserBalance(key string, value float64) error {
-	client := redisHelper.Client()
-	if client == nil {
-		return errors.New("redis client is not initialized")
-	}
+// DecrUserBalance 累减用户余额（key不存在时创建并设置TTL到当天结束）
+func DecrUserBalance(key string, delta float64) error {
 	// 缓存到当天结束
 	now := time.Now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
 	ttl := midnight.Sub(now)
-	return client.Set(context.Background(), key, strconv.FormatFloat(value, 'f', 8, 64), ttl).Err()
+	return redisHelper.DecrFloat(context.Background(), key, delta, ttl)
 }

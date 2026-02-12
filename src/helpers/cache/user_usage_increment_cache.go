@@ -20,7 +20,7 @@ var (
 
 func getUserUsageIncrementKey(userId string) string {
 	today := time.Now().Format("2006-01-02-15")
-	return redisHelper.BuildKey("user_usage_increment", userId, today)
+	return redisHelper.BuildKey("user_usage_increment", today, userId)
 }
 
 func GetUserUsageIncrement(userId string) float64 {

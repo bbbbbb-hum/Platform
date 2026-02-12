@@ -49,6 +49,7 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 	}
 	// 获取工具价格信息
 	toolsPrice := cache.GetToolsPrice(rc.ServiceID, userCmd)
+	rc.Stats["tools_price"] = toolsPrice
 	// 获取账户信息
 	userId := rc.Stats["user_id"].(string)
 	keyId := rc.Stats["key_id"].(int64)
@@ -75,12 +76,12 @@ func (s *StatisticPreNode) Process(rc *types.RunningContext, userCmd string, use
 			err = fmt.Errorf("%s 账户余额不足~", userId)
 			return
 		}
-		// 设置用户使用量增量
-		err = cache.SetUserUsageIncrement(userId, toolsPrice)
-		if err != nil {
-			logger.Error("设置用户使用量增量失败", zap.String("user_id", userId), zap.Error(err))
-			return
-		}
+		// 设置用户使用量增量 （更改到后置统计节点）
+		//err = cache.SetUserUsageIncrement(userId, toolsPrice)
+		//if err != nil {
+		//	logger.Error("设置用户使用量增量失败", zap.String("user_id", userId), zap.Error(err))
+		//	return
+		//}
 	}
 	// 统计调用次数 (改用定时任务)
 	// var serviceModel = &models.AeMcpServices{}

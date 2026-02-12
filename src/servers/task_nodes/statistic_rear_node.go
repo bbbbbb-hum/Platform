@@ -1,6 +1,7 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/cache"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/helpers/mq"
 	"AgentEarth_AgentPlatform/src/models"
@@ -75,6 +76,29 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 	} else {
 		logger.Debug("发布请求日志到 NATS 成功")
 	}
+	// 更新 redis 用户使用量缓存
+	// 获取工具价格信息
+	if requestLogModel.XlcreditAmount > 0 {
+		// 获取账户信息
+		userId, ok := rc.Stats["user_id"].(string)
+		if !ok || userId == "" {
+			logger.Error("获取用户ID失败", zap.Any("user_id", rc.Stats["user_id"]))
+			return
+		}
+		userBalanceKey := cache.GetUserBalanceKey(userId)
+		// 更新用户使用量缓存（累加工具价格）
+		err = cache.SetUserUsageIncrement(userId, requestLogModel.XlcreditAmount)
+		if err != nil {
+			logger.Error("更新用户使用量缓存失败", zap.Error(err))
+			return // 累加失败则不更新余额
+		}
+		// 更新用户余额（累减工具价格）
+		err = cache.DecrUserBalance(userBalanceKey, requestLogModel.XlcreditAmount)
+		if err != nil {
+			logger.Error("更新用户余额失败", zap.Error(err))
+		}
+	}
+
 	return
 }
 
