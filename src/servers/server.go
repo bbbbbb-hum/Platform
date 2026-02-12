@@ -137,6 +137,9 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	//
 	var toolModelList = []*models.AeMcpTools{}
 	for _, tool := range server.toolDescList {
+		// 在工具描述中添加价格信息
+		tool.ToolDesc = fmt.Sprintf("%s (Price: %.8f XLCredit)", tool.ToolDesc, service.XlcreditPrice)
+
 		// 注册工具，捕获并跳过可能的 panic
 		if !safeAddTool(server, tool) {
 			logger.Warn("注册工具失败，已跳过", zap.String("tool_name", tool.ToolName))
