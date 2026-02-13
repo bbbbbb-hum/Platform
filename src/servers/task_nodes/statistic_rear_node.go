@@ -85,6 +85,7 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 			logger.Error("获取用户ID失败", zap.Any("user_id", rc.Stats["user_id"]))
 			return
 		}
+		logger.Info("更新用户余额缓存...", zap.Any("user_id", userId), zap.Any("xlcredit_amount", requestLogModel.XlcreditAmount))
 		userBalanceKey := cache.GetUserBalanceKey(userId)
 		// 更新用户使用量缓存（累加工具价格）
 		err = cache.SetUserUsageIncrement(userId, requestLogModel.XlcreditAmount)

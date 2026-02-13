@@ -52,6 +52,7 @@ func (m *AeMcpServices) GetOneByServerId(serverId string) (*AeMcpServices, error
 func (m *AeMcpServices) GetList() (err error, list []*AeMcpServices) {
 	db := GetDB()
 	db = db.Where("is_created = ?", true)
+	//db = db.Where("id = ?", 7)
 	err = db.Find(&list).Error
 	return
 }

@@ -15,7 +15,7 @@ import (
  */
 
 var (
-	userUsageIncrementTTL = 0 * time.Hour
+	userUsageIncrementTTL = 2 * time.Hour // 按小时统计，保留2小时
 )
 
 func getUserUsageIncrementKey(userId string) string {

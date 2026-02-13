@@ -24,6 +24,8 @@ type RequestLogsConsumer struct {
 	sub      *nats.Subscription
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+	mu       sync.Mutex // 保护 Start/Stop 操作
+	started  bool       // 防止重复启动
 }
 
 var (
@@ -41,6 +43,15 @@ func GetRequestLogsConsumer() *RequestLogsConsumer {
 
 // Start 启动消费者
 func (c *RequestLogsConsumer) Start() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 防止重复启动
+	if c.started {
+		logger.Warn("NATS 消费者已启动，忽略重复调用")
+		return nil
+	}
+
 	if !boot.IsNatsEnabled() {
 		return ErrNatsNotEnabled
 	}
@@ -73,6 +84,7 @@ func (c *RequestLogsConsumer) Start() error {
 
 	c.sub = sub
 	c.stopChan = make(chan struct{})
+	c.started = true
 
 	// 启动消费协程
 	c.wg.Add(1)
@@ -134,6 +146,12 @@ func (c *RequestLogsConsumer) consumeLoop() {
 					}
 					logger.Warn("NATS 连接已关闭，消费者退出")
 					return
+				}
+				// nats.ErrNoResponders: JetStream 暂时不可用（可能 Stream 未创建或 leader 选举中）
+				// 这是一个可恢复的错误，静默等待重试，避免日志刷屏
+				if err == nats.ErrNoResponders {
+					time.Sleep(5 * time.Second)
+					continue
 				}
 				logger.Error("拉取消息失败", zap.Error(err))
 				time.Sleep(time.Second)
@@ -212,14 +230,29 @@ func (c *RequestLogsConsumer) flushBatch(msgs []*nats.Msg, logs []*models.AeMcpS
 
 // Stop 停止消费者
 func (c *RequestLogsConsumer) Stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.started {
+		return
+	}
+
 	if c.stopChan != nil {
 		close(c.stopChan)
 	}
+
+	// 释放锁后等待 goroutine 退出，避免死锁
+	c.mu.Unlock()
 	c.wg.Wait()
+	c.mu.Lock()
 
 	if c.sub != nil {
 		c.sub.Unsubscribe()
+		c.sub = nil
 	}
+
+	c.stopChan = nil
+	c.started = false
 
 	logger.Info("NATS 消费者已停止")
 }

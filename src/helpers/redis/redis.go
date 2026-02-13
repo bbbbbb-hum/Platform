@@ -130,11 +130,12 @@ func IncrFloat(ctx context.Context, key string, delta float64, newKeyTTL time.Du
 		local add = tonumber(ARGV[1])
 		local ttlMs = tonumber(ARGV[2])
 		local newVal = (current and tonumber(current) or 0) + add
-		redis.call('SET', KEYS[1], tostring(newVal))
+		local newValStr = string.format("%.8f", newVal)
+		redis.call('SET', KEYS[1], newValStr)
 		if not current then
 			redis.call('PEXPIRE', KEYS[1], ttlMs)
 		end
-		return tostring(newVal)
+		return newValStr
 	`)
 	ttlMs := newKeyTTL.Milliseconds()
 	return script.Run(ctx, c, []string{key}, delta, ttlMs).Err()

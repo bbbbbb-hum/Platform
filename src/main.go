@@ -4,8 +4,10 @@ import (
 	"AgentEarth_AgentPlatform/src/boot"
 	"AgentEarth_AgentPlatform/src/config"
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/database"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/helpers/mq"
+	"AgentEarth_AgentPlatform/src/helpers/redis"
 	"AgentEarth_AgentPlatform/src/middleware"
 	"AgentEarth_AgentPlatform/src/servers"
 	"AgentEarth_AgentPlatform/src/servers/pools"
@@ -229,6 +231,24 @@ func main() {
 	logger.Info("正在关闭 NATS 连接...")
 	boot.CloseNats()
 	logger.Info("NATS 连接关闭完成")
+
+	// 关闭 Redis 连接
+	logger.Info("正在关闭 Redis 连接...")
+	if err := redis.Close(); err != nil {
+		logger.Error("关闭 Redis 连接失败", zap.Error(err))
+	} else {
+		logger.Info("Redis 连接关闭完成")
+	}
+
+	// 关闭数据库连接
+	logger.Info("正在关闭数据库连接...")
+	if database.SQLDB != nil {
+		if err := database.SQLDB.Close(); err != nil {
+			logger.Error("关闭数据库连接失败", zap.Error(err))
+		} else {
+			logger.Info("数据库连接关闭完成")
+		}
+	}
 
 	// 优雅关闭 HTTP 服务器
 	logger.Info("正在关闭HTTP服务器...")
