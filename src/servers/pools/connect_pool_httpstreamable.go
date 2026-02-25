@@ -96,6 +96,8 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	if connectInfo.Headers == nil { // 增加判空，兼容未初始化的场景
 		connectInfo.Headers = make(map[string]string)
 	}
+	connectTimeoutMS := getConnectTimeoutMS(connectInfo)
+	connectTimeout := time.Duration(connectTimeoutMS) * time.Millisecond
 	// 配置核心流式请求头
 	connectInfo.Headers["Accept"] = "text/event-stream, application/json"
 	connectInfo.Headers["Connection"] = "keep-alive"
@@ -104,7 +106,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   30 * time.Second,
+				Timeout:   connectTimeout,
 				KeepAlive: 30 * time.Second,
 			}
 
@@ -148,12 +150,36 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		Version: "1.0.0",
 	}, nil)
 	// Connect to the server.
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	start := time.Now()
+	session, err := client.Connect(connectCtx, &mcp.StreamableClientTransport{
 		Endpoint:   connectInfo.Url,
 		HTTPClient: httpClient,
 	}, nil)
 	if err != nil {
-		logger.Error("创建HTTP连接失败", zap.String("Url", connectInfo.Url), zap.Error(err))
+		errorType := "upstream_error"
+		if connectCtx.Err() == context.DeadlineExceeded {
+			errorType = "connect_timeout"
+		}
+		nodeID := int32(0)
+		serverID := ""
+		if sid < 0 {
+			nodeID = -sid
+			serverID = buildNodeServiceID(nodeID)
+		}
+		logger.Error("创建HTTP连接失败",
+			zap.String("stage", "initialize"),
+			zap.String("error_type", errorType),
+			zap.Int("timeout_ms", connectTimeoutMS),
+			zap.Int64("elapsed_ms", time.Since(start).Milliseconds()),
+			zap.Int32("node_id", nodeID),
+			zap.String("server_id", serverID),
+			zap.String("Url", connectInfo.Url),
+			zap.Error(err))
+		if errorType == "connect_timeout" {
+			return nil, fmt.Errorf("connect_timeout: timeout_ms=%d err=%w", connectTimeoutMS, err)
+		}
 		return
 	}
 	connection = &ExternalConnection{

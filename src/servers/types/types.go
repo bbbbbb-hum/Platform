@@ -40,6 +40,9 @@ type (
 		Description             string   `json:"description"`                // 节点描述
 		Enabled                 bool     `json:"enabled"`                    // 节点是否启用
 		ExternalServiceConfigID string   `json:"external_service_config_id"` // 外部服务配置ID
+		Protocol                string   `json:"protocol"`                   // 节点协议（默认 http）
+		NodeURL                 string   `json:"node_url"`                   // 节点内网地址
+		TimeoutMS               int      `json:"timeout_ms"`                 // 节点调用超时时间
 		ToolNames               []string `json:"tool_names"`                 // 贡献过的工具名称
 	}
 )

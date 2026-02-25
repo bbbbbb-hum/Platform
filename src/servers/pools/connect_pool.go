@@ -49,6 +49,7 @@ type (
 		Url            string            `json:"url,omitempty"`             // sse服务地址
 		Headers        map[string]string `json:"headers,omitempty"`         // 请求头
 		ConnectTimeout int               `json:"connect_timeout,omitempty"` //连接超时时间（毫秒）
+		CallTimeout    int               `json:"call_timeout,omitempty"`    //调用超时时间（毫秒）
 		MaxConnect     int               `json:"max_connect,omitempty"`     //实例最大连接数
 		MaxRetry       int               `json:"max_retry,omitempty"`       //最大重试次数
 		Interval       int               `json:"interval,omitempty"`        //重试间隔
@@ -190,10 +191,127 @@ func (c *ConnectionPool) InitializeService(externalServiceId string) error {
 	return nil
 }
 
+// InitializeNode 按节点配置初始化连接（最小改动：复用现有连接池结构）。
+func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, timeoutMS int) error {
+	if nodeID <= 0 {
+		return fmt.Errorf("invalid_node_config: node_id is required")
+	}
+	if strings.TrimSpace(nodeURL) == "" {
+		return fmt.Errorf("invalid_node_config: node_config.url is required")
+	}
+	if strings.TrimSpace(protocol) == "" {
+		protocol = "http"
+	}
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if !isProtocolEnabled(protocol) {
+		return fmt.Errorf("protocol_disabled: protocol=%s node_id=%d", protocol, nodeID)
+	}
+
+	serviceID := buildNodeServiceID(nodeID)
+	if _, err := c.getService(serviceID); err == nil {
+		return nil
+	}
+
+	connectTimeout := timeoutMS
+	if connectTimeout <= 0 {
+		connectTimeout = getConnectTimeoutMS(nil)
+	}
+	callTimeout := timeoutMS
+	if callTimeout <= 0 {
+		callTimeout = getCallTimeoutMS(nil)
+	}
+
+	service := &ExternalService{
+		Id:                -nodeID,
+		ExternalServiceId: serviceID,
+		Type:              "httpStreamable",
+		ServiceName:       fmt.Sprintf("node_%d", nodeID),
+		MaxInstance:       1,
+		Tools:             nil,
+		LaunchInfo:        nil,
+		ConnectInfo: &ConnectInfo{
+			Url:            strings.TrimSpace(nodeURL),
+			Headers:        map[string]string{},
+			ConnectTimeout: connectTimeout,
+			CallTimeout:    callTimeout,
+			MaxConnect:     1,
+			MaxRetry:       1,
+			Interval:       1000,
+		},
+		Accounts:    nil,
+		InstanceMap: make(map[string]*ServiceInstance),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(connectTimeout)*time.Millisecond)
+	defer cancel()
+
+	switch protocol {
+	case "http":
+		var err error
+		service, err = c.createInstancesForHttpStreamable(ctx, service)
+		if err != nil {
+			return err
+		}
+	case "sse":
+		var err error
+		service, err = c.createInstancesForSSE(ctx, service)
+		if err != nil {
+			return err
+		}
+	case "stdio":
+		var err error
+		service, err = c.createInstancesForStdio(ctx, service)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("protocol_disabled: unsupported protocol=%s node_id=%d", protocol, nodeID)
+	}
+
+	if len(service.InstanceMap) > 0 {
+		var firstInstance *ServiceInstance
+		for _, instance := range service.InstanceMap {
+			firstInstance = instance
+			break
+		}
+		if firstInstance != nil && len(firstInstance.Connections) > 0 {
+			tools, err := c.fetchTools(firstInstance.Connections[0].Session)
+			if err != nil {
+				logger.Warn("list_tools failed",
+					zap.String("stage", "list_tools"),
+					zap.String("error_type", "upstream_error"),
+					zap.Int32("node_id", nodeID),
+					zap.String("server_id", serviceID),
+					zap.Error(err))
+			} else {
+				service.Tools = tools
+			}
+		}
+	}
+
+	c.mutex.Lock()
+	c.services[service.ExternalServiceId] = service
+	c.mutex.Unlock()
+	return nil
+}
+
 // 获取工具
 func (c *ConnectionPool) fetchTools(session *mcp.ClientSession) (list []*mcp.Tool, err error) {
-	result, err := session.ListTools(context.Background(), &mcp.ListToolsParams{})
+	timeoutMS := getListToolsTimeoutMS()
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("listtools_timeout: timeout_ms=%d err=%w", timeoutMS, err)
+		}
+		logger.Warn("list_tools failed",
+			zap.String("stage", "list_tools"),
+			zap.String("error_type", "upstream_error"),
+			zap.Int("timeout_ms", timeoutMS),
+			zap.Int64("elapsed_ms", time.Since(start).Milliseconds()),
+			zap.Error(err))
 		return
 	}
 	return result.Tools, nil
@@ -235,14 +353,32 @@ func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]in
 	}
 
 	// 调用工具
+	timeoutMS := getCallTimeoutMS(service.ConnectInfo)
+	start := time.Now()
+	callCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+
 	params := &mcp.CallToolParams{
 		Name:      toolName,
 		Arguments: args,
 	}
 
-	result, err := connection.Session.CallTool(context.Background(), params)
+	result, err := connection.Session.CallTool(callCtx, params)
 	if err != nil {
-		return nil, fmt.Errorf("工具调用失败: %v", err)
+		errorType := "upstream_error"
+		if callCtx.Err() == context.DeadlineExceeded {
+			errorType = "call_timeout"
+		}
+		logger.Error("call_tool failed",
+			zap.String("stage", "call_tool"),
+			zap.String("error_type", errorType),
+			zap.Int("timeout_ms", timeoutMS),
+			zap.Int64("elapsed_ms", time.Since(start).Milliseconds()),
+			zap.String("server_id", serviceID),
+			zap.Int32("node_id", parseNodeIDFromServiceID(serviceID)),
+			zap.String("tool_name", toolName),
+			zap.Error(err))
+		return nil, fmt.Errorf("%s: %v", errorType, err)
 	}
 
 	// 更新连接状态（这里简化处理，实际应该在请求完成后减少ActiveUsers）
@@ -250,6 +386,11 @@ func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]in
 	connection.ActiveUsers++
 
 	return result, nil
+}
+
+// CallToolByNode 按 node_id 调用工具。
+func (c *ConnectionPool) CallToolByNode(nodeID int32, toolName string, args map[string]interface{}) (*mcp.CallToolResult, error) {
+	return c.CallTool(buildNodeServiceID(nodeID), toolName, args)
 }
 
 // getService 获取服务
@@ -295,6 +436,44 @@ func (c *ConnectionPool) GetServiceTools(externalServiceId string) []*mcp.Tool {
 	service, exists := c.services[externalServiceId]
 	if exists {
 		return service.Tools
+	}
+	return nil
+}
+
+// GetNodeTools 按 node_id 获取工具列表。
+func (c *ConnectionPool) GetNodeTools(nodeID int32) []*mcp.Tool {
+	return c.GetServiceTools(buildNodeServiceID(nodeID))
+}
+
+// RemoveNode 释放指定 node_id 对应的连接资源。
+func (c *ConnectionPool) RemoveNode(nodeID int32) error {
+	if nodeID <= 0 {
+		return fmt.Errorf("invalid_node_id")
+	}
+	return c.removeService(buildNodeServiceID(nodeID))
+}
+
+func (c *ConnectionPool) removeService(serviceID string) error {
+	c.mutex.Lock()
+	service, exists := c.services[serviceID]
+	if exists {
+		delete(c.services, serviceID)
+	}
+	c.mutex.Unlock()
+
+	if !exists || service == nil {
+		return nil
+	}
+
+	for _, instance := range service.InstanceMap {
+		if instance == nil {
+			continue
+		}
+		for _, conn := range instance.Connections {
+			if conn != nil && conn.Session != nil {
+				_ = conn.Session.Close()
+			}
+		}
 	}
 	return nil
 }

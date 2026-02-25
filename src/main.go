@@ -129,6 +129,29 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/ready", readyHandler)
 
+	// 平台运行验证接口（内部受控）
+	mux.HandleFunc("/verification/runtime/connect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeConnectHandler(w, r)
+	})
+	mux.HandleFunc("/verification/runtime/call", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeCallHandler(w, r)
+	})
+	mux.HandleFunc("/verification/runtime/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeDisconnectHandler(w, r)
+	})
+
 	// 生产环境不开启
 	if env != "prod" {
 		// pprof 性能分析端点（不需要认证，生产环境建议关闭或加认证）
