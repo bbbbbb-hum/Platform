@@ -185,6 +185,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	connection = &ExternalConnection{
 		ConnectionID: fmt.Sprintf("connection_%d_%d", sid, aid),
 		Session:      session,
+		Transport:    transport, // 保存 Transport 引用，用于关闭时释放空闲连接
 		LastPing:     time.Now(),
 		ActiveUsers:  0,
 	}
