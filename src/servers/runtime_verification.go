@@ -7,6 +7,7 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/task_nodes"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -32,7 +33,32 @@ type runtimeDisconnectReq struct {
 	NodeID int64 `json:"node_id"`
 }
 
+func appendDebugD37A85(runID, hypothesisID, location, message string, data map[string]interface{}) {
+	payload := map[string]interface{}{
+		"sessionId":    "d37a85",
+		"runId":        runID,
+		"hypothesisId": hypothesisID,
+		"location":     location,
+		"message":      message,
+		"data":         data,
+		"timestamp":    time.Now().UnixMilli(),
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	fmt.Println(string(raw))
+}
+
 func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
+	// #region agent log
+	appendDebugD37A85("pre-fix", "H4", "runtime_verification.go:RuntimeConnectHandler", "platform api runtime connect entered", map[string]interface{}{
+		"remote_addr":  r.RemoteAddr,
+		"forwarded_for": r.Header.Get("X-Forwarded-For"),
+		"method":       r.Method,
+		"path":         r.URL.Path,
+	})
+	// #endregion
 	if !allowVerificationRequest(r) {
 		writeRuntimeJSON(w, http.StatusForbidden, map[string]interface{}{
 			"success": false,
