@@ -1,7 +1,9 @@
 package pools
 
 import (
+	"AgentEarth_AgentPlatform/src/boot"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/helpers/mq"
 	"AgentEarth_AgentPlatform/src/models"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ type RequestLogsPool struct {
 	flushStop    chan struct{}                      // 停止信号
 	flushWG      sync.WaitGroup                     // 等待 flush 协程退出
 	maxBatchSize int                                // 最大批量大小，避免单次插入过多
+	useNats      bool                               // 是否启用 NATS 发布（运行时根据 NATS 可用性决定）
 }
 
 var (
@@ -30,6 +33,7 @@ func GetRequestLogsPool() *RequestLogsPool {
 		globalRequestLogsPool = &RequestLogsPool{
 			logs:         make([]*models.AeMcpServicesRequestLogs, 0),
 			maxBatchSize: 1000, // 默认最大批量大小为1000
+			useNats:      boot.IsNatsEnabled(),
 		}
 	})
 	return globalRequestLogsPool
@@ -50,6 +54,7 @@ func (p *RequestLogsPool) Add(log *models.AeMcpServicesRequestLogs) {
 	}
 
 	p.logs = append(p.logs, log)
+	logger.Info("请求日志队列", zap.Any("当前请求日志队列长度为", len(p.logs)))
 }
 
 // Start 启动定时批量插入协程
@@ -63,11 +68,15 @@ func (p *RequestLogsPool) Start(interval time.Duration) {
 	stop := make(chan struct{})
 	p.flushStop = stop
 	p.stopped = false // 重置停止标志
+	// 运行时检查 NATS 可用性
+	p.useNats = boot.IsNatsEnabled()
 	// 在启动 goroutine 前登记
 	p.flushWG.Add(1)
 	p.mutex.Unlock()
 
-	logger.Info("启动请求日志批量插入协程", zap.Duration("interval", interval))
+	logger.Info("启动请求日志批量插入协程",
+		zap.Duration("interval", interval),
+		zap.Bool("use_nats", p.useNats))
 
 	go func() {
 		defer p.flushWG.Done()
@@ -140,7 +149,8 @@ func (p *RequestLogsPool) flush() {
 	p.flushInBatches(batch)
 }
 
-// flushInBatches 分批插入（当批量过大时）
+// flushInBatches 分批处理（当批量过大时）
+// 根据 useNats 标志决定发布到 NATS 还是直接写入数据库
 func (p *RequestLogsPool) flushInBatches(batch []*models.AeMcpServicesRequestLogs) {
 	total := len(batch)
 	for i := 0; i < total; i += p.maxBatchSize {
@@ -148,11 +158,47 @@ func (p *RequestLogsPool) flushInBatches(batch []*models.AeMcpServicesRequestLog
 		if end > total {
 			end = total
 		}
-		p.insertBatch(batch[i:end])
+		subBatch := batch[i:end]
+
+		if p.useNats {
+			// NATS 模式：发布到消息队列
+			if err := p.publishToNats(subBatch); err != nil {
+				// NATS 发布失败，降级到数据库直写
+				logger.Warn("NATS 发布失败，降级到数据库直写",
+					zap.Int("count", len(subBatch)),
+					zap.Error(err))
+				p.insertBatch(subBatch)
+			}
+			logger.Debug("NATS 批量插入成功",
+				zap.Int("count", len(subBatch)))
+		} else {
+			// 降级模式：直接写入数据库
+			p.insertBatch(subBatch)
+		}
 	}
 }
 
-// insertBatch 执行单次批量插入
+// publishToNats 发布日志批次到 NATS JetStream
+func (p *RequestLogsPool) publishToNats(batch []*models.AeMcpServicesRequestLogs) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	err := mq.PublishRequestLogs(batch)
+	if err != nil {
+		logger.Error("发布请求日志到 NATS 失败",
+			zap.Int("count", len(batch)),
+			zap.Error(err))
+		// 发布失败，记录到错误日志便于后续补录
+		logger.Error("NATS 发布失败，日志已记录", zap.Any("miss_request_logs", batch))
+		return err
+	}
+
+	logger.Debug("发布请求日志到 NATS 成功", zap.Int("count", len(batch)))
+	return nil
+}
+
+// insertBatch 执行单次批量插入（降级模式）
 func (p *RequestLogsPool) insertBatch(batch []*models.AeMcpServicesRequestLogs) {
 	if len(batch) == 0 {
 		return
@@ -175,4 +221,19 @@ func (p *RequestLogsPool) GetPendingCount() int {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return len(p.logs)
+}
+
+// IsUsingNats 检查是否正在使用 NATS 模式（用于监控）
+func (p *RequestLogsPool) IsUsingNats() bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.useNats
+}
+
+// SetUseNats 设置是否使用 NATS 模式（用于运行时切换）
+func (p *RequestLogsPool) SetUseNats(useNats bool) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.useNats = useNats
+	logger.Info("请求日志池 NATS 模式已切换", zap.Bool("use_nats", useNats))
 }

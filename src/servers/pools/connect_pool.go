@@ -76,6 +76,7 @@ type (
 	ExternalConnection struct {
 		ConnectionID string
 		Session      *mcp.ClientSession
+		Transport    *http.Transport // HTTP Transport 引用，用于关闭时释放空闲连接
 		LastPing     time.Time
 		ActiveUsers  int // 当前活跃用户数（可选，用于后期优化）
 	}
@@ -309,19 +310,32 @@ func (c *ConnectionPool) Close() {
 	for _, service := range c.services {
 		for instanceID, instance := range service.InstanceMap {
 			for _, conn := range instance.Connections {
-				if conn.Session != nil {
-					if err := conn.Session.Close(); err != nil {
-						logger.Error("关闭连接失败",
-							zap.String("instanceID", instanceID),
-							zap.Error(err))
-					} else {
-						logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
-					}
-				}
+				closeConnection(conn, instanceID)
 			}
 		}
 	}
 	c.services = make(map[string]*ExternalService)
+}
+
+// closeConnection 关闭单个连接并释放其资源（Session + Transport）
+func closeConnection(conn *ExternalConnection, instanceID string) {
+	if conn == nil {
+		return
+	}
+	// 先关闭 Session
+	if conn.Session != nil {
+		if err := conn.Session.Close(); err != nil {
+			logger.Error("关闭连接失败",
+				zap.String("instanceID", instanceID),
+				zap.Error(err))
+		} else {
+			logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
+		}
+	}
+	// 再关闭 Transport 的空闲连接，释放文件描述符
+	if conn.Transport != nil {
+		conn.Transport.CloseIdleConnections()
+	}
 }
 
 // StartMaintainer 启动维护协程
@@ -393,8 +407,8 @@ func (c *ConnectionPool) maintainOnce() {
 				if c.isSessionHealthy(conn.Session) {
 					healthy = append(healthy, conn)
 				} else {
-					// 关闭异常会话
-					_ = conn.Session.Close()
+					// 关闭异常会话并释放 Transport
+					closeConnection(conn, inst.InstanceId)
 					logger.Debug("关闭异常会话", zap.String("InstanceId", inst.InstanceId))
 				}
 			}

@@ -72,7 +72,7 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 		lastResp, err1 = instance.Node.Process(rc, userCmd, userParamMap, lastResp)
 		if err1 != nil {
 			logger.Error("节点处理失败", zap.Error(err1), zap.String("node_name", instance.Node.GetNodeInfo().NodeName))
-			continue
+			break
 		}
 		logger.Debug("节点流转成功", zap.String("node_name", instance.Node.GetNodeInfo().NodeName), zap.Int("node_index", k))
 	}
@@ -82,7 +82,7 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 		currentResp = &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{
-					Text: "未获取到结果",
+					Text: "No results obtained.",
 				},
 			},
 			StructuredContent: nil,

@@ -16,7 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 )
 
-func SetupDB() {
+func SetupDB() error {
 	var dbConfig gorm.Dialector
 	connType := config.Get("database.connection")
 	switch connType {
@@ -63,7 +63,7 @@ func SetupDB() {
 		})
 	default:
 		logger.Error("没有该配置！", zap.String("error", "database connection not supported"))
-		return
+		return fmt.Errorf("database connection not supported")
 	}
 	// 连接数据库，并设置 GORM 的日志模式
 	logger.Info("连接数据库...", zap.String("action", "connecting"))
@@ -72,19 +72,19 @@ func SetupDB() {
 	// 检查数据库连接是否成功
 	if database.DB == nil {
 		logger.Error("连接失败", zap.String("error", "database.DB is nil"))
-		return
+		return fmt.Errorf("database connection failed")
 	}
 	// 测试数据库连接（获取 sql.DB）
 	sqlDB, err := database.DB.DB()
 	if err != nil {
 		logger.Error("获取底层数据库连接失败", zap.String("error", err.Error()))
-		return
+		return fmt.Errorf("failed to get underlying database connection")
 	}
 
 	// 检查 database.SQLDB 是否有效
 	if database.SQLDB == nil {
 		logger.Error("database.SQLDB 为 nil，无法设置连接池参数")
-		return
+		return fmt.Errorf("database.SQLDB is nil")
 	}
 
 	// 基于当前驱动读取连接池参数（避免读取到不存在的顶层键导致无限制）
@@ -124,9 +124,11 @@ func SetupDB() {
 	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pools configured"))
 	if err = sqlDB.Ping(); err != nil {
 		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
+		return fmt.Errorf("database connection test failed")
 	}
 	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 	// database.DB.AutoMigrate(&user.User{})
+	return nil
 }
 
 // GetDB 获取数据库连接实例

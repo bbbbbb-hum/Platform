@@ -27,10 +27,10 @@ DOCKER_IMAGE_NAME := ae-platform-api
 DOCKER_IMAGE_TAG := $(shell date '+%Y%m%d%H%M%S')
 DOCKER_REP_PATH ?=
 XLDOCKER_REP_PATH ?=
-# 控制是否在 docker build 时拉取镜像
-# missing: 本地没有或需要更新时拉取（默认）
-# false: 只使用本地镜像，不检查更新（避免限流，但可能使用旧镜像）
-DOCKER_PULL_POLICY ?= missing
+# 控制是否在 docker build 时拉取基础镜像
+# true: 每次构建都尝试拉取最新镜像
+# false: 只使用本地镜像，不检查更新（默认，避免限流）
+DOCKER_PULL_POLICY ?= false
 
 # 所有依赖的 MCP 镜像（18个）
 MCP_IMAGES := \
@@ -125,7 +125,7 @@ clean:
 # ========================
 # Build docker image
 # ========================
-dockerimg: build
+dockerimg:
 	@echo "======================================="
 	@echo "开始构建docker image..."
 	@echo "======================================="
@@ -153,7 +153,6 @@ dockerimg: build
 				PULL_COUNT=$$((PULL_COUNT + 1)); \
 				echo ""; \
 				echo "[$$PULL_COUNT/$$MISSING_COUNT] 拉取: $(XLDOCKER_REP_PATH)$$img"; \
-				# 添加重试逻辑
 				RETRY=0; \
 				while [ $$RETRY -lt 3 ]; do \
 					if docker pull $(XLDOCKER_REP_PATH)$$img; then \
@@ -191,10 +190,10 @@ dockerimg: build
 	@echo "开始构建 Docker 镜像..."
 	@echo "使用 MCP 镜像仓库前缀: '$(XLDOCKER_REP_PATH)'"
 	@echo "镜像拉取策略: --pull=$(DOCKER_PULL_POLICY)"
-	@if [ "$(DOCKER_PULL_POLICY)" = "false" ]; then \
-		echo "⚠️  注意: 将使用本地镜像，不检查更新"; \
-	else \
+	@if [ "$(DOCKER_PULL_POLICY)" = "true" ]; then \
 		echo "ℹ️  将检查镜像更新（可能触发限流）"; \
+	else \
+		echo "✅ 使用本地镜像，不检查更新"; \
 	fi
 	@echo "注意: 如遇429限流错误，将自动重试..."
 	@for i in 1 2 3; do \
