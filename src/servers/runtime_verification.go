@@ -89,7 +89,7 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := pools.GetConnectPool().InitializeNode(node.Id, cfg.Protocol, cfg.URL, timeoutMS); err != nil {
 		logger.Error("runtime connect failed", zap.Int64("node_id", req.NodeID), zap.Error(err))
-		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": err.Error()})
+		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfg.URL)})
 		return
 	}
 
@@ -150,7 +150,7 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := pools.GetConnectPool().InitializeNode(node.Id, cfg.Protocol, cfg.URL, timeoutMS); err != nil {
 		logger.Error("runtime call initialize failed", zap.Int64("node_id", req.NodeID), zap.Error(err))
-		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": err.Error()})
+		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfg.URL)})
 		return
 	}
 
@@ -291,4 +291,18 @@ func BuildRuntimeVerificationURL(baseURL, path string) string {
 func ParseNodeIDFromString(v string) int32 {
 	id, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 32)
 	return int32(id)
+}
+
+func normalizeRuntimeInitError(err error, url string) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "protocol_not_supported") {
+		return "仅支持 HTTP 协议，请使用内网 service URL（示例：http://ae-xxx-service:8081）"
+	}
+	if strings.Contains(msg, "http_connect_failed") || strings.Contains(msg, "no_instance_created") {
+		return fmt.Sprintf("HTTP连接失败，请检查 service 名称/端口/网络：url=%s, err=%s", strings.TrimSpace(url), msg)
+	}
+	return msg
 }

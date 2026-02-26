@@ -32,8 +32,10 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 	}
 
 	cfg.Protocol = strings.ToLower(strings.TrimSpace(cfg.Protocol))
-	if cfg.Protocol == "" {
+	if cfg.Protocol == "" || cfg.Protocol == "http" {
 		cfg.Protocol = "http"
+	} else {
+		return nil, fmt.Errorf("protocol_not_supported: only http is allowed")
 	}
 	// 兼容历史字段 timeout。
 	if cfg.TimeoutMS <= 0 && cfg.Timeout > 0 {

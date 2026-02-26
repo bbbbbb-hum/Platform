@@ -203,8 +203,8 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 		protocol = "http"
 	}
 	protocol = strings.ToLower(strings.TrimSpace(protocol))
-	if !isProtocolEnabled(protocol) {
-		return fmt.Errorf("protocol_disabled: protocol=%s node_id=%d", protocol, nodeID)
+	if protocol != "http" {
+		return fmt.Errorf("protocol_not_supported: only http is allowed node_id=%d protocol=%s", nodeID, protocol)
 	}
 
 	serviceID := buildNodeServiceID(nodeID)
@@ -245,27 +245,10 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(connectTimeout)*time.Millisecond)
 	defer cancel()
 
-	switch protocol {
-	case "http":
-		var err error
-		service, err = c.createInstancesForHttpStreamable(ctx, service)
-		if err != nil {
-			return err
-		}
-	case "sse":
-		var err error
-		service, err = c.createInstancesForSSE(ctx, service)
-		if err != nil {
-			return err
-		}
-	case "stdio":
-		var err error
-		service, err = c.createInstancesForStdio(ctx, service)
-		if err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("protocol_disabled: unsupported protocol=%s node_id=%d", protocol, nodeID)
+	var err error
+	service, err = c.createInstancesForHttpStreamable(ctx, service)
+	if err != nil {
+		return fmt.Errorf("http_connect_failed: node_id=%d server_id=%s url=%s err=%w", nodeID, serviceID, strings.TrimSpace(nodeURL), err)
 	}
 
 	if len(service.InstanceMap) == 0 {
@@ -286,55 +269,8 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 			zap.String("server_id", serviceID),
 			zap.String("protocol", protocol),
 			zap.Error(err))
-		// 兼容仅填 url 且未设置 protocol 的场景：第一次 http 失败后，自动尝试 sse 一次。
-		if protocol == "http" {
-			closeNodeServiceSessions(service)
-			logger.Info("list_tools retry with sse",
-				zap.Int32("node_id", nodeID),
-				zap.String("server_id", serviceID))
-			retryService := &ExternalService{
-				Id:                -nodeID,
-				ExternalServiceId: serviceID,
-				Type:              "sse",
-				ServiceName:       fmt.Sprintf("node_%d", nodeID),
-				MaxInstance:       1,
-				Tools:             nil,
-				LaunchInfo:        nil,
-				ConnectInfo: &ConnectInfo{
-					Url:            strings.TrimSpace(nodeURL),
-					Headers:        map[string]string{},
-					ConnectTimeout: connectTimeout,
-					CallTimeout:    callTimeout,
-					MaxConnect:     1,
-					MaxRetry:       1,
-					Interval:       1000,
-				},
-				Accounts:    nil,
-				InstanceMap: make(map[string]*ServiceInstance),
-			}
-			retryCtx, cancelRetry := context.WithTimeout(context.Background(), time.Duration(connectTimeout)*time.Millisecond)
-			retryService, retryInitErr := c.createInstancesForSSE(retryCtx, retryService)
-			cancelRetry()
-			if retryInitErr != nil {
-				closeNodeServiceSessions(retryService)
-				return fmt.Errorf("list_tools_failed: protocol=http retry=sse init_failed node_id=%d server_id=%s retry_err=%v origin_err=%w", nodeID, serviceID, retryInitErr, err)
-			}
-			retryFirst := firstConnectedInstance(retryService)
-			if retryFirst == nil {
-				closeNodeServiceSessions(retryService)
-				return fmt.Errorf("list_tools_failed: protocol=http retry=sse no_active_connection node_id=%d server_id=%s origin_err=%w", nodeID, serviceID, err)
-			}
-			retryTools, retryToolsErr := c.fetchTools(retryFirst.Connections[0].Session)
-			if retryToolsErr != nil {
-				closeNodeServiceSessions(retryService)
-				return fmt.Errorf("list_tools_failed: protocol=http retry=sse fetch_failed node_id=%d server_id=%s retry_err=%v origin_err=%w", nodeID, serviceID, retryToolsErr, err)
-			}
-			service = retryService
-			service.Tools = retryTools
-		} else {
-			closeNodeServiceSessions(service)
-			return fmt.Errorf("list_tools_failed: protocol=%s node_id=%d server_id=%s err=%w", protocol, nodeID, serviceID, err)
-		}
+		closeNodeServiceSessions(service)
+		return fmt.Errorf("list_tools_failed: protocol=%s node_id=%d server_id=%s url=%s err=%w", protocol, nodeID, serviceID, strings.TrimSpace(nodeURL), err)
 	} else {
 		service.Tools = tools
 	}
