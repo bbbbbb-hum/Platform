@@ -17,7 +17,7 @@ type (
 	// ConnectionPool 是 node 维度的连接资源管理器。
 	// 设计目标：
 	// - key 固定为 node:{id}
-	// - 每个 node 固定单实例单连接
+	// - 每个 node 固定单实例多连接（由 max_connect 控制目标连接数）
 	// - 调用时可快速重连，后台可周期自愈
 	ConnectionPool struct {
 		services map[string]*ExternalService // key是节点服务键（node:{id}）
@@ -28,12 +28,12 @@ type (
 	}
 	// 节点服务定义（node_config 语义）
 	ExternalService struct {
-		Id                int32            // 节点ID的负值（仅用于构造稳定连接ID）
+		NodeID            int32            // 节点ID（内部标识）
 		NodeServiceKey    string           // 连接池节点服务键（node:{id}）
 		ServiceName       string           // 节点服务名称
 		Tools             []*mcp.Tool      // 工具列表
 		ConnectInfo       *ConnectInfo     // 连接配置信息
-		Instance          *ServiceInstance // 单实例（固定一条连接）
+		Instance          *ServiceInstance // 单实例（维护连接列表）
 		ConfigFingerprint string           // 当前生效配置指纹（用于自动重建）
 	}
 
@@ -47,7 +47,7 @@ type (
 		Interval       int               `json:"interval,omitempty"`        //重试间隔
 		ClientVersion  string            `json:"client_version,omitempty"`  // 客户端版本（可选）
 	}
-	// 节点服务运行实例（单连接）
+	// 节点服务运行实例（多连接）
 	ServiceInstance struct {
 		InstanceId        string                // 实例ID
 		Connections       []*ExternalConnection // 连接列表
@@ -145,7 +145,7 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 			zap.Int("effective_max_connect", targetConnections))
 	}
 
-	// 3) 固定单实例单连接配置：每个 node 只维护一条上游连接。
+	// 3) 单实例多连接：每个 node 维护 N 条上游连接（由 targetConnections 决定）；配置指纹用于判断是否重建。
 	configFingerprint := buildNodeConfigFingerprint(strings.TrimSpace(nodeURL), connectTimeout, callTimeout, targetConnections)
 	if existing, err := c.getService(nodeServiceKey); err == nil && existing != nil {
 		if existing.ConfigFingerprint == configFingerprint {
@@ -159,7 +159,7 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 		_ = c.removeService(nodeServiceKey)
 	}
 	service := &ExternalService{
-		Id:             -nodeID,
+		NodeID:        nodeID,
 		NodeServiceKey: nodeServiceKey,
 		ServiceName:    fmt.Sprintf("node_%d", nodeID),
 		Tools:          nil,
@@ -263,7 +263,7 @@ func (c *ConnectionPool) fetchTools(session *mcp.ClientSession) (list []*mcp.Too
 	return result.Tools, nil
 }
 
-// CallTool 调用工具（单实例单连接，失败时快速重连并重试一次）。
+// CallTool 调用工具（单实例多连接，选择可用连接；失败时仅重连当前连接并重试一次）。
 func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[string]interface{}) (*mcp.CallToolResult, error) {
 	// 获取服务
 	service, err := c.getService(nodeServiceKey)
@@ -630,7 +630,7 @@ func (c *ConnectionPool) maintainOnce() {
 		inst.mutex.Unlock()
 		createdCount := 0
 		for currentConnections < targetConnections {
-			newConn, err := c.createReplacementConnection(svc, inst, currentConnections)
+			newConn, err := c.createReplacementConnection(svc, currentConnections)
 			if err != nil {
 				logger.Warn("维护补齐连接失败",
 					zap.String("service_name", svc.ServiceName),
@@ -679,12 +679,12 @@ func (c *ConnectionPool) isSessionHealthy(session *mcp.ClientSession) bool {
 }
 
 // createReplacementConnection 针对实例创建一条新的 HTTP 连接。
-func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, inst *ServiceInstance, connectionIndex int) (*ExternalConnection, error) {
+func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, connectionIndex int) (*ExternalConnection, error) {
 	ctx := context.Background()
 	if svc == nil || svc.ConnectInfo == nil {
 		return nil, fmt.Errorf("连接配置缺失")
 	}
-	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.Id, connectionIndex)
+	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.NodeID, connectionIndex)
 }
 
 func getAvailableConnection(service *ExternalService) (*ServiceInstance, *ExternalConnection, int, error) {
@@ -737,7 +737,7 @@ func (c *ConnectionPool) fastReconnectNodeConnection(service *ExternalService, i
 	}
 
 	// Step C: 基于同一 service 配置创建新连接。
-	newConn, err := c.createReplacementConnection(service, instance, connectionIndex)
+	newConn, err := c.createReplacementConnection(service, connectionIndex)
 	if err != nil {
 		return nil, err
 	}

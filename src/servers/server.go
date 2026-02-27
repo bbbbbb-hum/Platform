@@ -234,7 +234,7 @@ func safeAddTool(server *Server, tool *types.ToolDesc) (ok bool) {
 			ok = false
 		}
 	}()
-	mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
+	mcp.AddTool(server.mcpServer, &mcp.Tool{
 		Name:        tool.ToolName,
 		Description: tool.ToolDesc,
 		Title:       fmt.Sprintf("%s Tool", tool.ToolName),

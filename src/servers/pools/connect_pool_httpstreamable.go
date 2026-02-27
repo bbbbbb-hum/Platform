@@ -21,18 +21,18 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 	}
 	// 多连接模型：每个节点仍是单实例，但实例内维护 N 条连接。
 	instance := &ServiceInstance{
-		InstanceId:        fmt.Sprintf("instance_%d", service.Id),
+		InstanceId:        fmt.Sprintf("instance_node_%d", service.NodeID),
 		Connections:       make([]*ExternalConnection, 0, targetConnections),
 		TargetConnections: targetConnections,
 	}
 	for i := 0; i < targetConnections; i++ {
-		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.Id, i)
+		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.NodeID, i)
 		if err1 != nil {
 			// 保持历史行为：这里记录错误，但不抛出 err，交由上层统一判定失败。
 			logger.Error("创建http实例连接失败",
 				zap.String("ServiceName", service.ServiceName),
-				zap.Int32("node_id", -service.Id),
-				zap.String("node_service_key", buildNodeServiceKey(-service.Id)),
+				zap.Int32("node_id", service.NodeID),
+				zap.String("node_service_key", buildNodeServiceKey(service.NodeID)),
 				zap.Int("connection_index", i),
 				zap.Error(err1))
 			continue
@@ -45,13 +45,8 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 }
 
 // 创建httpStreamable连接
-func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, nodeServiceID int32, connectionIndex int) (connection *ExternalConnection, err error) {
-	nodeID := int32(0)
-	nodeServiceKey := ""
-	if nodeServiceID < 0 {
-		nodeID = -nodeServiceID
-		nodeServiceKey = buildNodeServiceKey(nodeID)
-	}
+func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, nodeID int32, connectionIndex int) (connection *ExternalConnection, err error) {
+	nodeServiceKey := buildNodeServiceKey(nodeID)
 	logger.Info("创建HTTP连接...",
 		zap.String("url", connectInfo.Url),
 		zap.Int32("node_id", nodeID),
@@ -111,7 +106,6 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		},
 	}
 	logger.Info("客户端连接头:",
-		zap.Int32("node_service_id", nodeServiceID),
 		zap.Int32("node_id", nodeID),
 		zap.String("node_service_key", nodeServiceKey),
 		zap.Int("connection_index", connectionIndex),
@@ -150,7 +144,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		return
 	}
 	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d", nodeServiceID, connectionIndex),
+		ConnectionID: fmt.Sprintf("connection_%d_%d", nodeID, connectionIndex),
 		Session:      session,
 		Transport:    transport, // 保存 Transport 引用，用于关闭时释放空闲连接
 		LastPing:     time.Now(),

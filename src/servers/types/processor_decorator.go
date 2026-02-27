@@ -42,7 +42,7 @@ func (w *processorWithPre) Process(rc *RunningContext, userCmd string, userParam
 }
 
 // pre 统一的前置处理（默认无操作，可按需扩展）
-func (w *processorWithPre) pre(rc *RunningContext, userCmd string, userParamMap map[string]interface{}, lastResp *mcp.CallToolResult) error {
+func (w *processorWithPre) pre(_ *RunningContext, userCmd string, _ map[string]interface{}, _ *mcp.CallToolResult) error {
 	// 工具白名单：ToolNames 为空表示不限制；非空时必须包含 userCmd 才允许执行
 	nodeInfo := w.GetNodeInfo()
 	if nodeInfo == nil {
