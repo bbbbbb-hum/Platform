@@ -28,12 +28,13 @@ type (
 	}
 	// 节点服务定义（node_config 语义）
 	ExternalService struct {
-		Id             int32            // 节点ID的负值（仅用于构造稳定连接ID）
-		NodeServiceKey string           // 连接池节点服务键（node:{id}）
-		ServiceName    string           // 节点服务名称
-		Tools          []*mcp.Tool      // 工具列表
-		ConnectInfo    *ConnectInfo     // 连接配置信息
-		Instance       *ServiceInstance // 单实例（固定一条连接）
+		Id                int32            // 节点ID的负值（仅用于构造稳定连接ID）
+		NodeServiceKey    string           // 连接池节点服务键（node:{id}）
+		ServiceName       string           // 节点服务名称
+		Tools             []*mcp.Tool      // 工具列表
+		ConnectInfo       *ConnectInfo     // 连接配置信息
+		Instance          *ServiceInstance // 单实例（固定一条连接）
+		ConfigFingerprint string           // 当前生效配置指纹（用于自动重建）
 	}
 
 	ConnectInfo struct {
@@ -66,6 +67,12 @@ type (
 	headerTransport struct {
 		Transport http.RoundTripper
 		Headers   map[string]string
+	}
+	NodePoolState struct {
+		NodeID            int32
+		NodeServiceKey    string
+		ActiveConnections int
+		TargetConnections int
 	}
 )
 
@@ -115,10 +122,6 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 	}
 
 	nodeServiceKey := buildNodeServiceKey(nodeID)
-	// 已存在连接则直接复用，避免重复初始化。
-	if _, err := c.getService(nodeServiceKey); err == nil {
-		return nil
-	}
 
 	connectTimeout := timeoutMS
 	if connectTimeout <= 0 {
@@ -128,9 +131,33 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 	if callTimeout <= 0 {
 		callTimeout = getCallTimeoutMS(nil)
 	}
-	targetConnections := getNodeMaxConnect(maxConnect)
+	targetConnections, maxConnectDecision := normalizeNodeMaxConnect(maxConnect)
+	logger.Info("initialize node target connections",
+		zap.Int32("node_id", nodeID),
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int("requested_max_connect", maxConnect),
+		zap.Int("effective_max_connect", targetConnections),
+		zap.String("max_connect_decision", maxConnectDecision))
+	if maxConnect != targetConnections {
+		logger.Info("max_connect normalized",
+			zap.Int32("node_id", nodeID),
+			zap.Int("requested_max_connect", maxConnect),
+			zap.Int("effective_max_connect", targetConnections))
+	}
 
 	// 3) 固定单实例单连接配置：每个 node 只维护一条上游连接。
+	configFingerprint := buildNodeConfigFingerprint(strings.TrimSpace(nodeURL), connectTimeout, callTimeout, targetConnections)
+	if existing, err := c.getService(nodeServiceKey); err == nil && existing != nil {
+		if existing.ConfigFingerprint == configFingerprint {
+			return nil
+		}
+		logger.Info("node config changed, rebuilding pool",
+			zap.Int32("node_id", nodeID),
+			zap.String("node_service_key", nodeServiceKey),
+			zap.String("old_fingerprint", existing.ConfigFingerprint),
+			zap.String("new_fingerprint", configFingerprint))
+		_ = c.removeService(nodeServiceKey)
+	}
 	service := &ExternalService{
 		Id:             -nodeID,
 		NodeServiceKey: nodeServiceKey,
@@ -145,7 +172,8 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 			MaxRetry:       1,
 			Interval:       1000,
 		},
-		Instance: nil,
+		Instance:          nil,
+		ConfigFingerprint: configFingerprint,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(connectTimeout)*time.Millisecond)
@@ -326,6 +354,7 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 	logger.Warn("call_tool recovered after reconnect",
 		zap.String("node_service_key", nodeServiceKey),
 		zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+		zap.Int("connection_index", connectionIndex),
 		zap.String("tool_name", toolName))
 	return result, nil
 }
@@ -372,6 +401,35 @@ func (c *ConnectionPool) RemoveNode(nodeID int32) error {
 	return c.removeService(buildNodeServiceKey(nodeID))
 }
 
+func (c *ConnectionPool) GetNodePoolState(nodeID int32) *NodePoolState {
+	nodeServiceKey := buildNodeServiceKey(nodeID)
+	c.mutex.RLock()
+	service, exists := c.services[nodeServiceKey]
+	c.mutex.RUnlock()
+	if !exists || service == nil || service.Instance == nil {
+		return nil
+	}
+	inst := service.Instance
+	inst.mutex.Lock()
+	defer inst.mutex.Unlock()
+	active := 0
+	for _, conn := range inst.Connections {
+		if conn != nil && conn.Session != nil {
+			active++
+		}
+	}
+	target := inst.TargetConnections
+	if target <= 0 {
+		target = 1
+	}
+	return &NodePoolState{
+		NodeID:            nodeID,
+		NodeServiceKey:    nodeServiceKey,
+		ActiveConnections: active,
+		TargetConnections: target,
+	}
+}
+
 func (c *ConnectionPool) removeService(nodeServiceKey string) error {
 	// 先从 map 移除再释放资源，避免并发读到“正在关闭”的对象。
 	c.mutex.Lock()
@@ -388,10 +446,7 @@ func (c *ConnectionPool) removeService(nodeServiceKey string) error {
 	// remove 是显式释放场景，关闭该节点全部连接。
 	if service.Instance != nil {
 		for _, conn := range service.Instance.Connections {
-			if conn == nil || conn.Session == nil {
-				continue
-			}
-			_ = conn.Session.Close()
+			closeConnection(conn, service.NodeServiceKey)
 		}
 	}
 	return nil
@@ -425,10 +480,10 @@ func closeConnection(conn *ExternalConnection, instanceID string) {
 	if conn.Session != nil {
 		if err := conn.Session.Close(); err != nil {
 			logger.Error("关闭连接失败",
-				zap.String("instanceID", instanceID),
+				zap.String("instance_id", instanceID),
 				zap.Error(err))
 		} else {
-			logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
+			logger.Info("关闭连接成功", zap.String("instance_id", instanceID))
 		}
 	}
 	// 再关闭 Transport 的空闲连接，释放文件描述符
@@ -488,7 +543,7 @@ func (c *ConnectionPool) maintainOnce() {
 		services = append(services, s)
 	}
 	c.mutex.RUnlock()
-	logger.Info("检查连接状态...")
+	logger.Debug("检查连接状态...")
 	for _, svc := range services {
 		if svc == nil || svc.Instance == nil {
 			continue
@@ -653,4 +708,8 @@ func (c *ConnectionPool) fastReconnectNodeConnection(service *ExternalService, i
 	}
 	instance.mutex.Unlock()
 	return newConn, nil
+}
+
+func buildNodeConfigFingerprint(url string, connectTimeoutMS, callTimeoutMS, maxConnect int) string {
+	return fmt.Sprintf("url=%s|connect=%d|call=%d|max_connect=%d", strings.TrimSpace(url), connectTimeoutMS, callTimeoutMS, maxConnect)
 }

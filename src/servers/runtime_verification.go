@@ -116,14 +116,20 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 		toolList = append(toolList, item)
 	}
 
-	writeRuntimeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"success":     true,
 		"node_id":     req.NodeID,
 		"service_url": cfg.URL,
 		"tools":       toolList,
 		"tools_count": len(toolList),
 		"duration_ms": time.Since(start).Milliseconds(),
-	})
+	}
+	if poolState := pools.GetConnectPool().GetNodePoolState(node.Id); poolState != nil {
+		resp["node_service_key"] = poolState.NodeServiceKey
+		resp["active_connections"] = poolState.ActiveConnections
+		resp["target_connections"] = poolState.TargetConnections
+	}
+	writeRuntimeJSON(w, http.StatusOK, resp)
 }
 
 func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
@@ -195,13 +201,19 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 		isError = result.IsError
 	}
 
-	writeRuntimeJSON(w, http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"success":     true,
 		"tool_name":   req.ToolName,
 		"is_error":    isError,
 		"content":     contentAny,
 		"duration_ms": time.Since(start).Milliseconds(),
-	})
+	}
+	if poolState := pools.GetConnectPool().GetNodePoolState(node.Id); poolState != nil {
+		resp["node_service_key"] = poolState.NodeServiceKey
+		resp["active_connections"] = poolState.ActiveConnections
+		resp["target_connections"] = poolState.TargetConnections
+	}
+	writeRuntimeJSON(w, http.StatusOK, resp)
 }
 
 func RuntimeDisconnectHandler(w http.ResponseWriter, r *http.Request) {

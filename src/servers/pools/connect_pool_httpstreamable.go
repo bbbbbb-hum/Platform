@@ -31,6 +31,8 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 			// 保持历史行为：这里记录错误，但不抛出 err，交由上层统一判定失败。
 			logger.Error("创建http实例连接失败",
 				zap.String("ServiceName", service.ServiceName),
+				zap.Int32("node_id", -service.Id),
+				zap.String("node_service_key", buildNodeServiceKey(-service.Id)),
 				zap.Int("connection_index", i),
 				zap.Error(err1))
 			continue
@@ -44,7 +46,17 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 
 // 创建httpStreamable连接
 func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, nodeServiceID int32, connectionIndex int) (connection *ExternalConnection, err error) {
-	logger.Info("创建HTTP连接...", zap.String("Url", connectInfo.Url))
+	nodeID := int32(0)
+	nodeServiceKey := ""
+	if nodeServiceID < 0 {
+		nodeID = -nodeServiceID
+		nodeServiceKey = buildNodeServiceKey(nodeID)
+	}
+	logger.Info("创建HTTP连接...",
+		zap.String("url", connectInfo.Url),
+		zap.Int32("node_id", nodeID),
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int("connection_index", connectionIndex))
 
 	if connectInfo.Headers == nil { // 增加判空，兼容未初始化的场景
 		connectInfo.Headers = make(map[string]string)
@@ -100,6 +112,8 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	}
 	logger.Info("客户端连接头:",
 		zap.Int32("node_service_id", nodeServiceID),
+		zap.Int32("node_id", nodeID),
+		zap.String("node_service_key", nodeServiceKey),
 		zap.Int("connection_index", connectionIndex),
 		zap.Any("headers", connectInfo.Headers))
 	// 创建 MCP Client。该客户端与具体上游 endpoint 建立 streamable 会话。
@@ -120,12 +134,6 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		if connectCtx.Err() == context.DeadlineExceeded {
 			errorType = "connect_timeout"
 		}
-		nodeID := int32(0)
-		nodeServiceKey := ""
-		if nodeServiceID < 0 {
-			nodeID = -nodeServiceID
-			nodeServiceKey = buildNodeServiceKey(nodeID)
-		}
 		logger.Error("创建HTTP连接失败",
 			zap.String("stage", "initialize"),
 			zap.String("error_type", errorType),
@@ -133,7 +141,8 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 			zap.Int64("elapsed_ms", time.Since(start).Milliseconds()),
 			zap.Int32("node_id", nodeID),
 			zap.String("node_service_key", nodeServiceKey),
-			zap.String("Url", connectInfo.Url),
+			zap.String("url", connectInfo.Url),
+			zap.Int("connection_index", connectionIndex),
 			zap.Error(err))
 		if errorType == "connect_timeout" {
 			return nil, fmt.Errorf("connect_timeout: timeout_ms=%d err=%w", connectTimeoutMS, err)
@@ -148,6 +157,10 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		ActiveUsers:  0,
 	}
 	// 连接对象由上层挂到 service.Instance 上，并纳入维护协程管理。
-	logger.Info("创建HTTP连接成功", zap.String("ConnectionID", connection.ConnectionID))
+	logger.Info("创建HTTP连接成功",
+		zap.String("connection_id", connection.ConnectionID),
+		zap.Int32("node_id", nodeID),
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int("connection_index", connectionIndex))
 	return
 }

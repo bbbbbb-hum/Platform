@@ -33,17 +33,25 @@ func getCallTimeoutMS(connectInfo *ConnectInfo) int {
 	return helperConfig.GetInt("MCP_CALL_TIMEOUT_MS", defaultCallTimeoutMS)
 }
 
-func getNodeMaxConnect(requested int) int {
+func normalizeNodeMaxConnect(requested int) (int, string) {
 	val := requested
 	if val <= 0 {
 		val = helperConfig.GetInt("MCP_NODE_MAX_CONNECT", defaultNodeMaxConnect)
-	}
-	if val <= 0 {
-		return defaultNodeMaxConnect
+		if val <= 0 {
+			return defaultNodeMaxConnect, "fallback_default"
+		}
 	}
 	if val > maxNodeMaxConnect {
-		return maxNodeMaxConnect
+		return maxNodeMaxConnect, "clamped_max"
 	}
+	if requested <= 0 {
+		return val, "fallback_global"
+	}
+	return val, "as_requested"
+}
+
+func getNodeMaxConnect(requested int) int {
+	val, _ := normalizeNodeMaxConnect(requested)
 	return val
 }
 
