@@ -15,7 +15,8 @@ type AeMcpTaskNode struct {
 	Enabled           bool      `gorm:"column:enabled;default:false" json:"enabled"`                    // 是否启用
 	CreateTime        time.Time `gorm:"column:create_time" json:"create_time"`                          // 创建时间
 	UpdateTime        time.Time `gorm:"column:update_time" json:"update_time"`                          // 更新时间
-	ExternalServiceId string    `gorm:"column:external_service_id;not null" json:"external_service_id"` // 外部服务配置service_id
+	ServerId          string    `gorm:"column:server_id" json:"server_id"`                               // 共表字段：服务id
+	NodeConfig        string    `gorm:"column:node_config;type:jsonb" json:"node_config"`                // 共表字段：节点配置（含url/protocol/timeout）
 }
 
 func (m *AeMcpTaskNode) TableName() string {

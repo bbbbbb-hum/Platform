@@ -24,7 +24,6 @@ func (e *EmptyNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	// 空节点不提供任何工具
 	logger.Info("空节点初始化完成，不提供任何工具")

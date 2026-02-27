@@ -1,24 +1,60 @@
 #### 服务配置文件示例
-SERVER_NAME: AgentPlatform //服务名称
-SERVER_ENV: local //环境名称
-SERVER_DEBUG: true //开发模式
-SERVER_HOST: 0.0.0.0 //监听地址
-SERVER_PORT:  //监听端口
+SERVER_NAME: AgentPlatform #服务名称
+SERVER_ENV: local #环境名称
+SERVER_DEBUG: true #开发模式
+SERVER_HOST: 0.0.0.0 #监听地址
+SERVER_PORT:  #监听端口
 
-TIMEZONE: Asia/Shanghai //时区
-SERVER_AUTH_ENABLE: true // 鉴权开关
-SERVER_AUTH_KEY: X-Api-Key // 鉴权字段
-SERVER_AUTH_CACHE_TTL: 1800 // 鉴权缓存时间
+TIMEZONE: Asia/Shanghai #时区
+SERVER_AUTH_ENABLE: true # 鉴权开关
+SERVER_AUTH_KEY: X-Api-Key # 鉴权字段
+SERVER_AUTH_CACHE_TTL: 1800 # 鉴权缓存时间
+SERVER_NAMESPACE: local-dev
 
-DB_CONNECTION: postgres //数据库类型
-DB_HOST: //数据库地址
-DB_PORT: //数据库端口
-DB_DATABASE: //数据库名称
-DB_USERNAME: //数据库用户名
-DB_PASSWORD: //数据库密码
-DB_MAX_IDLE_CONNECTIONS: 10 //数据库最大空闲连接数
-DB_MAX_OPEN_CONNECTIONS: 20 //数据库最大打开连接数
-DB_MAX_LIFE_SECONDS: 300 //数据库连接最大生命周期
+DB_CONNECTION: postgres #数据库类型
+DB_HOST: #数据库地址
+DB_PORT: #数据库端口
+DB_DATABASE: #数据库名称
+DB_USERNAME: #数据库用户名
+DB_PASSWORD: #数据库密码
+DB_MAX_IDLE_CONNECTIONS: 10 #数据库最大空闲连接数
+DB_MAX_OPEN_CONNECTIONS: 20 #数据库最大打开连接数
+DB_MAX_LIFE_SECONDS: 300 #数据库连接最大生命周期
+DB_SSLMODE: disable #数据库SSL模式
   
+LOG_LEVEL: debug #日志等级
+LOG_TYPE: console #日志类型 只有一个 console 选项
+
+REDIS_ADDR: 127.0.0.1:6379 #redis地址
+REDIS_PASSWORD: #redis密码
+REDIS_DB: 0 #redis数据库
+REDIS_POOL_SIZE: 10 #redis连接池大小
+REDIS_MIN_IDLE_CONNS: 10 #redis最小空闲连接数
+REDIS_MAX_RETRIES: 3 #redis最大重试次数
+REDIS_DIAL_TIMEOUT_SECONDS: 5 #redis连接超时时间
+REDIS_READ_TIMEOUT_SECONDS: 3 #redis读取超时
+REDIS_WRITE_TIMEOUT_SECONDS: 3 #redis写入超时
+REDIS_POOL_TIMEOUT_SECONDS: 5 #redis连接池超时时间
+REDIS_PREFIX: ae #redis前缀
+
+NATS_URL: nats://localhost:4222 #NATS地址，K8s中使用 nats://nats.default.svc.cluster.local:4222
+NATS_STREAM_NAME: REQUEST_LOGS #JetStream流名称
+NATS_SUBJECT: logs.request #发布主题
+NATS_MAX_RECONNECTS: 5 #最大重连次数
+NATS_RECONNECT_WAIT_SECONDS: 2 #重连等待时间（秒）
+NATS_CONNECT_TIMEOUT_SECONDS: 10 #连接超时时间（秒）
+NATS_STREAM_MAX_MSGS: 1000000 #流最大消息数
+NATS_STREAM_MAX_BYTES: 1073741824 #流最大字节数（1GB）
+NATS_STREAM_MAX_AGE_HOURS: 24 #消息最大保留时间（小时）
+NATS_STREAM_REPLICAS: 1 # 流副本数
+
+NAMESPACE: local-dev # pod命名空间
 LOG_LEVEL: debug //日志等级
 LOG_TYPE: console //日志类型 只有一个 console 选项
+
+ENABLED_PROTOCOLS: http // 协议开关，默认仅启用http
+MCP_CONNECT_TIMEOUT_MS: 30000 // 建连超时（毫秒）
+MCP_LISTTOOLS_TIMEOUT_MS: 15000 // 工具发现超时（毫秒）
+MCP_CALL_TIMEOUT_MS: 30000 // 工具调用超时（毫秒）
+VERIFICATION_TOKEN: "" // 平台运行验证令牌（为空时仅允许内网来源）
+VERIFICATION_DEFAULT_TIMEOUT_SEC: 30 // 平台运行验证默认超时（秒）

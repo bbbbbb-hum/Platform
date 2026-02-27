@@ -4,7 +4,10 @@ import (
 	"AgentEarth_AgentPlatform/src/boot"
 	"AgentEarth_AgentPlatform/src/config"
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
+	"AgentEarth_AgentPlatform/src/helpers/database"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/helpers/mq"
+	"AgentEarth_AgentPlatform/src/helpers/redis"
 	"AgentEarth_AgentPlatform/src/middleware"
 	"AgentEarth_AgentPlatform/src/servers"
 	"AgentEarth_AgentPlatform/src/servers/pools"
@@ -81,13 +84,33 @@ func main() {
 	// 初始化 Logger
 	boot.SetupLogger()
 	// 初始化 DB
-	boot.SetupDB()
+	err := boot.SetupDB()
+	if err != nil {
+		logger.Error("初始化DB失败", zap.Error(err))
+		//return
+	}
+	// 初始化 Redis
+	err = boot.SetupRedis()
+	if err != nil {
+		logger.Error("初始化Redis失败", zap.Error(err))
+		//return
+	}
+	// 初始化 NATS（可选，失败不影响服务启动，会降级到数据库直写模式）
+	if err = boot.SetupNats(); err != nil {
+		logger.Warn("初始化NATS失败,请查询配置文件，并检查NATS服务是否正常启动", zap.Error(err))
+		//return
+	}
+	// 启动 NATS 消费者（批量消费日志并插入数据库）
+	if err = mq.GetRequestLogsConsumer().Start(); err != nil {
+		logger.Error("启动 NATS 消费者失败", zap.Error(err))
+		//return
+	}
 
 	// 初始化 MCP 服务映射表
 	//if err := server.InitializeMcpServices(); err != nil {
 	if err := servers.Initialize(); err != nil {
 		logger.Error("初始化MCP服务失败", zap.Error(err))
-		return
+		//return
 	}
 
 	// 初始化 Prometheus Metrics
@@ -97,8 +120,9 @@ func main() {
 	// 启动连接池维护协程（按需创建服务/实例，所以全局维护线程可以提前启动）
 	pools.GetConnectPool().StartMaintainer(60 * time.Second)
 
-	// 启动请求日志批量插入协程（每分钟同步一次）
-	pools.GetRequestLogsPool().Start(60 * time.Second)
+	// 启动请求日志批量插入协程（每分钟同步一次） 暂时不使用
+	// 该协程会检查 NATS 可用性，启用 NATS 时发布到消息队列，否则降级到数据库直写
+	//pools.GetRequestLogsPool().Start(60 * time.Second)
 
 	// 初始化 mcp 服务
 	httpStreamableHandler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
@@ -128,6 +152,29 @@ func main() {
 	// 健康检查端点（不需要认证）
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/ready", readyHandler)
+
+	// 平台运行验证接口（内部受控）
+	mux.HandleFunc("/verification/runtime/connect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeConnectHandler(w, r)
+	})
+	mux.HandleFunc("/verification/runtime/call", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeCallHandler(w, r)
+	})
+	mux.HandleFunc("/verification/runtime/disconnect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		servers.RuntimeDisconnectHandler(w, r)
+	})
 
 	// 生产环境不开启
 	if env != "prod" {
@@ -198,6 +245,34 @@ func main() {
 	pools.GetRequestLogsPool().Stop()
 	logger.Info("连接池关闭完成")
 
+	// 先停止 NATS 消费者（会处理完缓冲区中的数据再退出）
+	logger.Info("正在停止 NATS 消费者...")
+	mq.GetRequestLogsConsumer().Stop()
+	logger.Info("NATS 消费者已停止")
+
+	// 再关闭 NATS 连接
+	logger.Info("正在关闭 NATS 连接...")
+	boot.CloseNats()
+	logger.Info("NATS 连接关闭完成")
+
+	// 关闭 Redis 连接
+	logger.Info("正在关闭 Redis 连接...")
+	if err := redis.Close(); err != nil {
+		logger.Error("关闭 Redis 连接失败", zap.Error(err))
+	} else {
+		logger.Info("Redis 连接关闭完成")
+	}
+
+	// 关闭数据库连接
+	logger.Info("正在关闭数据库连接...")
+	if database.SQLDB != nil {
+		if err := database.SQLDB.Close(); err != nil {
+			logger.Error("关闭数据库连接失败", zap.Error(err))
+		} else {
+			logger.Info("数据库连接关闭完成")
+		}
+	}
+
 	// 优雅关闭 HTTP 服务器
 	logger.Info("正在关闭HTTP服务器...")
 	if err := server.Shutdown(shutdownCtx); err != nil {
@@ -205,6 +280,5 @@ func main() {
 	} else {
 		logger.Info("HTTP服务器关闭完成")
 	}
-
 	logger.Info("服务已安全退出")
 }

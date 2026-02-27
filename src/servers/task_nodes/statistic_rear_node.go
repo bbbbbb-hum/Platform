@@ -1,9 +1,10 @@
 package task_nodes
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers/cache"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
+	"AgentEarth_AgentPlatform/src/helpers/mq"
 	"AgentEarth_AgentPlatform/src/models"
-	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
 	"time"
@@ -28,7 +29,6 @@ func (s *StatisticRearNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	logger.Info("后置统计节点初始化完成，不提供任何工具")
 	return nil
@@ -65,8 +65,40 @@ func (s *StatisticRearNode) Process(rc *types.RunningContext, userCmd string, us
 	requestLogModel.Status = 1
 	requestLogModel.UpdateTime = time.Now()
 
-	// 将更新后的日志加入批量插入队列
-	pools.GetRequestLogsPool().Add(requestLogModel)
+	// 将日志添加到缓冲池，由池统一批量发布到 NATS（或降级写入数据库）
+	//pools.GetRequestLogsPool().Add(requestLogModel)
+	err = mq.PublishRequestLog(requestLogModel)
+	if err != nil {
+		logger.Error("发布请求日志到 NATS 失败", zap.Error(err))
+		// 发布失败，记录到错误日志便于后续补录
+		logger.Error("NATS 发布失败，日志已记录", zap.Any("miss_request_logs", requestLogModel))
+	} else {
+		logger.Debug("发布请求日志到 NATS 成功")
+	}
+	// 更新 redis 用户使用量缓存
+	// 获取工具价格信息
+	if requestLogModel.XlcreditAmount > 0 {
+		// 获取账户信息
+		userId, ok := rc.Stats["user_id"].(string)
+		if !ok || userId == "" {
+			logger.Error("获取用户ID失败", zap.Any("user_id", rc.Stats["user_id"]))
+			return
+		}
+		logger.Info("更新用户余额缓存...", zap.Any("user_id", userId), zap.Any("xlcredit_amount", requestLogModel.XlcreditAmount))
+		userBalanceKey := cache.GetUserBalanceKey(userId)
+		// 更新用户使用量缓存（累加工具价格）
+		err = cache.SetUserUsageIncrement(userId, requestLogModel.XlcreditAmount)
+		if err != nil {
+			logger.Error("更新用户使用量缓存失败", zap.Error(err))
+			return // 累加失败则不更新余额
+		}
+		// 更新用户余额（累减工具价格）
+		err = cache.DecrUserBalance(userBalanceKey, requestLogModel.XlcreditAmount)
+		if err != nil {
+			logger.Error("更新用户余额失败", zap.Error(err))
+		}
+	}
+
 	return
 }
 

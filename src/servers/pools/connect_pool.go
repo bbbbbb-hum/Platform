@@ -15,67 +15,43 @@ import (
 
 type (
 	ConnectionPool struct {
-		services map[string]*ExternalService // key是服务ID
+		services map[string]*ExternalService // key是节点服务键（node:{id}）
 		mutex    sync.RWMutex
 		// 维护协程控制
 		maintainStop chan struct{}
 		maintainWG   sync.WaitGroup
 	}
-	// 外部服务定义
+	// 节点服务定义（node_config 语义）
 	ExternalService struct {
-		Id                int32                       // 外部MCP服务自增ID
-		ExternalServiceId string                      // 外部MCP服务UUID
-		Type              string                      // 外部服务类型
-		ServiceName       string                      // 外部MCP服务名称
-		MaxInstance       int32                       // 最大实例数
-		Tools             []*mcp.Tool                 // 外部工具列表
-		LaunchInfo        *LaunchInfo                 // 启动信息
-		ConnectInfo       *ConnectInfo                // 连接配置信息
-		Accounts          []*ExternalAccount          // 外部账户信息
-		InstanceMap       map[string]*ServiceInstance // 运行实例列表
-	}
-	LaunchInfo struct {
-		Command         string                 `json:"command"`          // 启动命令
-		Args            []string               `json:"args"`             // 启动参数
-		Workdir         string                 `json:"workdir"`          // 工作目录
-		Env             map[string]interface{} `json:"env"`              // 环境变量
-		MaxRestarts     int                    `json:"max_restarts"`     // 最大重启数
-		LaunchTimeout   int                    `json:"launch_timeout"`   // 启动超时
-		ShutdownTimeout int                    `json:"shutdown_timeout"` // 关闭超时
-		IdleTtl         int                    `json:"idle_ttl"`         // 空闲超时
+		Id             int32            // 节点ID的负值（仅用于构造稳定连接ID）
+		NodeServiceKey string           // 连接池节点服务键（node:{id}）
+		ServiceName    string           // 节点服务名称
+		Tools          []*mcp.Tool      // 工具列表
+		ConnectInfo    *ConnectInfo     // 连接配置信息
+		Instance       *ServiceInstance // 单实例（固定一条连接）
 	}
 
 	ConnectInfo struct {
-		Url            string            `json:"url,omitempty"`             // sse服务地址
+		Url            string            `json:"url,omitempty"`             // httpStreamable 服务地址
 		Headers        map[string]string `json:"headers,omitempty"`         // 请求头
 		ConnectTimeout int               `json:"connect_timeout,omitempty"` //连接超时时间（毫秒）
+		CallTimeout    int               `json:"call_timeout,omitempty"`    //调用超时时间（毫秒）
 		MaxConnect     int               `json:"max_connect,omitempty"`     //实例最大连接数
 		MaxRetry       int               `json:"max_retry,omitempty"`       //最大重试次数
 		Interval       int               `json:"interval,omitempty"`        //重试间隔
 		ClientVersion  string            `json:"client_version,omitempty"`  // 客户端版本（可选）
 	}
-	// ExternalAccount 外部账户
-	ExternalAccount struct {
-		AccountID int32             // 账户ID
-		AuthInfo  map[string]string // 认证信息
-	}
-	// 外部服务运行实例
+	// 节点服务运行实例（单连接）
 	ServiceInstance struct {
-		InstanceId      string                // 实例ID
-		AccountId       int32                 // 账户ID
-		Connections     []*ExternalConnection // 连接列表
-		RoundRobinIndex int                   // 轮询索引
-		mutex           sync.Mutex            // 保护轮询索引
-
-		// 实例级配置快照（用于快速重建连接）
-		ResolvedConnectInfo *ConnectInfo // sse/httpStreamable 使用
-		ResolvedLaunchInfo  *LaunchInfo  // stdio 使用
-		TargetConnections   int          // 目标连接数（sse=MaxConnect，httpStreamable/stdio=1）
+		InstanceId string              // 实例ID
+		Connection *ExternalConnection // 单连接
+		mutex      sync.Mutex          // 保护连接
 	}
 	// ExternalConnection 单个连接信息
 	ExternalConnection struct {
 		ConnectionID string
 		Session      *mcp.ClientSession
+		Transport    *http.Transport // HTTP Transport 引用，用于关闭时释放空闲连接
 		LastPing     time.Time
 		ActiveUsers  int // 当前活跃用户数（可选，用于后期优化）
 	}
@@ -112,189 +88,262 @@ func GetConnectPool() *ConnectionPool {
 	return GlobalConnectionPool
 }
 
-// 初始化指定服务
-func (c *ConnectionPool) InitializeService(externalServiceId string) error {
-	logger.Info("初始化外部服务...", zap.String("external_service_id", externalServiceId))
-	ctx := context.Background()
+// InitializeNode 按节点配置初始化连接（最小改动：复用现有连接池结构）。
+func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, timeoutMS int) error {
+	if nodeID <= 0 {
+		return fmt.Errorf("invalid_node_config: node_id is required")
+	}
+	if strings.TrimSpace(nodeURL) == "" {
+		return fmt.Errorf("invalid_node_config: node_config.url is required")
+	}
+	if strings.TrimSpace(protocol) == "" {
+		protocol = "http"
+	}
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol != "http" {
+		return fmt.Errorf("protocol_not_supported: only http is allowed node_id=%d protocol=%s", nodeID, protocol)
+	}
 
-	// 加载服务配置
-	service, err := c.loadServiceConfigs(externalServiceId)
+	nodeServiceKey := buildNodeServiceKey(nodeID)
+	if _, err := c.getService(nodeServiceKey); err == nil {
+		return nil
+	}
+
+	connectTimeout := timeoutMS
+	if connectTimeout <= 0 {
+		connectTimeout = getConnectTimeoutMS(nil)
+	}
+	callTimeout := timeoutMS
+	if callTimeout <= 0 {
+		callTimeout = getCallTimeoutMS(nil)
+	}
+
+	service := &ExternalService{
+		Id:             -nodeID,
+		NodeServiceKey: nodeServiceKey,
+		ServiceName:    fmt.Sprintf("node_%d", nodeID),
+		Tools:          nil,
+		ConnectInfo: &ConnectInfo{
+			Url:            strings.TrimSpace(nodeURL),
+			Headers:        map[string]string{},
+			ConnectTimeout: connectTimeout,
+			CallTimeout:    callTimeout,
+			MaxConnect:     1,
+			MaxRetry:       1,
+			Interval:       1000,
+		},
+		Instance: nil,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(connectTimeout)*time.Millisecond)
+	defer cancel()
+
+	var err error
+	service, err = c.createInstancesForHttpStreamable(ctx, service)
 	if err != nil {
-		return err
+		return fmt.Errorf("http_connect_failed: node_id=%d node_service_key=%s url=%s err=%w", nodeID, nodeServiceKey, strings.TrimSpace(nodeURL), err)
 	}
 
-	// 加载账号配置
-	service, err = c.loadAccountConfigs(service)
+	if service.Instance == nil || service.Instance.Connection == nil || service.Instance.Connection.Session == nil {
+		closeNodeServiceSessions(service)
+		return fmt.Errorf("list_tools_failed: no_instance_created node_id=%d node_service_key=%s protocol=%s", nodeID, nodeServiceKey, protocol)
+	}
+	tools, err := c.fetchTools(service.Instance.Connection.Session)
 	if err != nil {
-		return err
+		logger.Warn("list_tools failed",
+			zap.String("stage", "list_tools"),
+			zap.String("error_type", "upstream_error"),
+			zap.Int32("node_id", nodeID),
+			zap.String("node_service_key", nodeServiceKey),
+			zap.String("protocol", protocol),
+			zap.Error(err))
+		closeNodeServiceSessions(service)
+		return fmt.Errorf("list_tools_failed: protocol=%s node_id=%d node_service_key=%s url=%s err=%w", protocol, nodeID, nodeServiceKey, strings.TrimSpace(nodeURL), err)
+	} else {
+		service.Tools = tools
 	}
 
-	// 创建实例信息
-	switch service.Type {
-	case "sse":
-		// 判断是否需要起本地服务（仅当配置了 command）
-		if service.LaunchInfo != nil && strings.TrimSpace(service.LaunchInfo.Command) != "" {
-			if err1 := c.startLocalService(ctx, service.LaunchInfo); err1 != nil {
-				return err1
-			}
-		}
-		service, err = c.createInstancesForSSE(ctx, service)
-	case "stdio":
-		service, err = c.createInstancesForStdio(ctx, service)
-	case "httpStreamable":
-		//判断是否需要起本地服务
-		if service.LaunchInfo != nil && strings.TrimSpace(service.LaunchInfo.Command) != "" {
-			// 启动本地服务
-			if err1 := c.startLocalService(ctx, service.LaunchInfo); err1 != nil {
-				return err1
-			}
-		}
-		service, err = c.createInstancesForHttpStreamable(ctx, service)
-	default:
-		err = fmt.Errorf("该类型暂不支持！")
-	}
-	if err != nil {
-		return err
-	}
-
-	// 获取工具列表（使用第一个实例的第一个连接）
-	if len(service.InstanceMap) > 0 {
-		var firstInstance *ServiceInstance
-		for _, instance := range service.InstanceMap {
-			firstInstance = instance
-			break
-		}
-		if firstInstance == nil {
-			return fmt.Errorf("没有可用账号连接")
-		}
-		if len(firstInstance.Connections) > 0 {
-			tools, err1 := c.fetchTools(firstInstance.Connections[0].Session)
-			if err1 != nil {
-				logger.Warn("获取工具列表失败", zap.Error(err1))
-			} else {
-				service.Tools = tools
-				logger.Info("工具数量:", zap.String("ServiceName", service.ServiceName), zap.Any("tools_nums", len(service.Tools)))
-			}
-
-		}
-	}
-	// 添加到连接池
 	c.mutex.Lock()
-	c.services[service.ExternalServiceId] = service
+	c.services[service.NodeServiceKey] = service
 	c.mutex.Unlock()
-
-	logger.Info("初始化外部服务完成...",
-		zap.String("external_service_id", service.ExternalServiceId),
-		zap.Int("账号数量", len(service.Accounts)),
-		zap.Int("工具数量", len(service.Tools)))
 	return nil
+}
+
+func closeNodeServiceSessions(service *ExternalService) {
+	if service == nil {
+		return
+	}
+	if service.Instance == nil || service.Instance.Connection == nil || service.Instance.Connection.Session == nil {
+		return
+	}
+	_ = service.Instance.Connection.Session.Close()
 }
 
 // 获取工具
 func (c *ConnectionPool) fetchTools(session *mcp.ClientSession) (list []*mcp.Tool, err error) {
-	result, err := session.ListTools(context.Background(), &mcp.ListToolsParams{})
+	timeoutMS := getListToolsTimeoutMS()
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+	result, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("listtools_timeout: timeout_ms=%d err=%w", timeoutMS, err)
+		}
+		logger.Warn("list_tools failed",
+			zap.String("stage", "list_tools"),
+			zap.String("error_type", "upstream_error"),
+			zap.Int("timeout_ms", timeoutMS),
+			zap.Int64("elapsed_ms", time.Since(start).Milliseconds()),
+			zap.Error(err))
 		return
 	}
 	return result.Tools, nil
 }
 
-// CallTool 调用工具（支持指定实例或自动选择）
-func (c *ConnectionPool) CallTool(serviceID, toolName string, args map[string]interface{}, instanceID ...string) (*mcp.CallToolResult, error) {
+// CallTool 调用工具（单实例单连接，失败时快速重连并重试一次）。
+func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[string]interface{}) (*mcp.CallToolResult, error) {
 	// 获取服务
-	service, err := c.getService(serviceID)
+	service, err := c.getService(nodeServiceKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// 选择实例
-	var instance *ServiceInstance
-	if len(instanceID) > 0 && instanceID[0] != "" {
-		// 使用指定账号
-		instance = service.InstanceMap[instanceID[0]]
-		if instance == nil {
-			return nil, fmt.Errorf("账号不存在: %s", instanceID[0])
-		}
-	} else {
-		// 自动选择账号（选择第一个可用的）
-		for _, v := range service.InstanceMap {
-			if len(v.Connections) > 0 {
-				instance = v
-				break
-			}
-		}
-		if instance == nil {
-			return nil, fmt.Errorf("没有可用的账号")
-		}
-	}
-
-	// 选择连接
-	connection := c.selectConnection(instance)
-	if connection == nil {
-		return nil, fmt.Errorf("没有可用的连接")
-	}
-
-	// 调用工具
-	params := &mcp.CallToolParams{
-		Name:      toolName,
-		Arguments: args,
-	}
-
-	result, err := connection.Session.CallTool(context.Background(), params)
+	instance, connection, err := getAvailableConnection(service)
 	if err != nil {
-		return nil, fmt.Errorf("工具调用失败: %v", err)
+		return nil, err
 	}
 
-	// 更新连接状态（这里简化处理，实际应该在请求完成后减少ActiveUsers）
-	connection.LastPing = time.Now()
-	connection.ActiveUsers++
+	callOnce := func(conn *ExternalConnection) (*mcp.CallToolResult, string, error, int64) {
+		timeoutMS := getCallTimeoutMS(service.ConnectInfo)
+		start := time.Now()
+		callCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMS)*time.Millisecond)
+		defer cancel()
 
+		params := &mcp.CallToolParams{
+			Name:      toolName,
+			Arguments: args,
+		}
+		result, callErr := conn.Session.CallTool(callCtx, params)
+		elapsedMS := time.Since(start).Milliseconds()
+		if callErr != nil {
+			errorType := "upstream_error"
+			if callCtx.Err() == context.DeadlineExceeded {
+				errorType = "call_timeout"
+			}
+			return nil, errorType, callErr, elapsedMS
+		}
+		conn.LastPing = time.Now()
+		conn.ActiveUsers++
+		return result, "", nil, elapsedMS
+	}
+
+	result, errorType, callErr, elapsedMS := callOnce(connection)
+	if callErr == nil {
+		return result, nil
+	}
+
+	logger.Error("call_tool failed",
+		zap.String("stage", "call_tool"),
+		zap.String("error_type", errorType),
+		zap.Int("timeout_ms", getCallTimeoutMS(service.ConnectInfo)),
+		zap.Int64("elapsed_ms", elapsedMS),
+		zap.Int("attempt", 1),
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+		zap.String("tool_name", toolName),
+		zap.Error(callErr))
+
+	retryConnection, reconnectErr := c.fastReconnectNodeService(service, instance)
+	if reconnectErr != nil {
+		logger.Error("call_tool failed",
+			zap.String("stage", "call_tool_reconnect"),
+			zap.String("error_type", "reconnect_failed"),
+			zap.Int("attempt", 1),
+			zap.String("node_service_key", nodeServiceKey),
+			zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+			zap.String("tool_name", toolName),
+			zap.Error(reconnectErr))
+		return nil, fmt.Errorf("%s: %v", errorType, callErr)
+	}
+
+	result, retryErrorType, retryErr, retryElapsedMS := callOnce(retryConnection)
+	if retryErr != nil {
+		logger.Error("call_tool failed",
+			zap.String("stage", "call_tool"),
+			zap.String("error_type", retryErrorType),
+			zap.Int("timeout_ms", getCallTimeoutMS(service.ConnectInfo)),
+			zap.Int64("elapsed_ms", retryElapsedMS),
+			zap.Int("attempt", 2),
+			zap.String("node_service_key", nodeServiceKey),
+			zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+			zap.String("tool_name", toolName),
+			zap.Error(retryErr))
+		return nil, fmt.Errorf("%s: %v", retryErrorType, retryErr)
+	}
+
+	logger.Warn("call_tool recovered after reconnect",
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+		zap.String("tool_name", toolName))
 	return result, nil
 }
 
+// CallToolByNode 按 node_id 调用工具。
+func (c *ConnectionPool) CallToolByNode(nodeID int32, toolName string, args map[string]interface{}) (*mcp.CallToolResult, error) {
+	return c.CallTool(buildNodeServiceKey(nodeID), toolName, args)
+}
+
 // getService 获取服务
-func (c *ConnectionPool) getService(externalServiceId string) (*ExternalService, error) {
+func (c *ConnectionPool) getService(nodeServiceKey string) (*ExternalService, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	service, exists := c.services[externalServiceId]
+	service, exists := c.services[nodeServiceKey]
 	if !exists {
-		return nil, fmt.Errorf("服务不存在: %s", externalServiceId)
+		return nil, fmt.Errorf("服务不存在: %s", nodeServiceKey)
 	}
 	return service, nil
 }
 
-// selectConnection 为账号选择一个连接（轮询）
-func (c *ConnectionPool) selectConnection(instance *ServiceInstance) *ExternalConnection {
-	instance.mutex.Lock()
-	defer instance.mutex.Unlock()
-
-	// 获取可用连接
-	var availableConnections []*ExternalConnection
-	for _, conn := range instance.Connections {
-		if conn != nil && conn.Session != nil {
-			availableConnections = append(availableConnections, conn)
-		}
+// GetServiceTools 获取单个服务工具列表
+func (c *ConnectionPool) GetServiceTools(nodeServiceKey string) []*mcp.Tool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	service, exists := c.services[nodeServiceKey]
+	if exists {
+		return service.Tools
 	}
+	return nil
+}
 
-	if len(availableConnections) == 0 {
+// GetNodeTools 按 node_id 获取工具列表。
+func (c *ConnectionPool) GetNodeTools(nodeID int32) []*mcp.Tool {
+	return c.GetServiceTools(buildNodeServiceKey(nodeID))
+}
+
+// RemoveNode 释放指定 node_id 对应的连接资源。
+func (c *ConnectionPool) RemoveNode(nodeID int32) error {
+	if nodeID <= 0 {
+		return fmt.Errorf("invalid_node_id")
+	}
+	return c.removeService(buildNodeServiceKey(nodeID))
+}
+
+func (c *ConnectionPool) removeService(nodeServiceKey string) error {
+	c.mutex.Lock()
+	service, exists := c.services[nodeServiceKey]
+	if exists {
+		delete(c.services, nodeServiceKey)
+	}
+	c.mutex.Unlock()
+
+	if !exists || service == nil {
 		return nil
 	}
 
-	// 轮询选择
-	selected := availableConnections[instance.RoundRobinIndex%len(availableConnections)]
-	instance.RoundRobinIndex = (instance.RoundRobinIndex + 1) % len(availableConnections)
-
-	return selected
-}
-
-// GetServiceTools 获取单个服务工具列表
-func (c *ConnectionPool) GetServiceTools(externalServiceId string) []*mcp.Tool {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	service, exists := c.services[externalServiceId]
-	if exists {
-		return service.Tools
+	if service.Instance != nil && service.Instance.Connection != nil && service.Instance.Connection.Session != nil {
+		_ = service.Instance.Connection.Session.Close()
 	}
 	return nil
 }
@@ -307,21 +356,32 @@ func (c *ConnectionPool) Close() {
 	defer c.mutex.Unlock()
 
 	for _, service := range c.services {
-		for instanceID, instance := range service.InstanceMap {
-			for _, conn := range instance.Connections {
-				if conn.Session != nil {
-					if err := conn.Session.Close(); err != nil {
-						logger.Error("关闭连接失败",
-							zap.String("instanceID", instanceID),
-							zap.Error(err))
-					} else {
-						logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
-					}
-				}
-			}
+		if service != nil && service.Instance != nil {
+			closeConnection(service.Instance.Connection, service.NodeServiceKey)
 		}
 	}
 	c.services = make(map[string]*ExternalService)
+}
+
+// closeConnection 关闭单个连接并释放其资源（Session + Transport）
+func closeConnection(conn *ExternalConnection, instanceID string) {
+	if conn == nil {
+		return
+	}
+	// 先关闭 Session
+	if conn.Session != nil {
+		if err := conn.Session.Close(); err != nil {
+			logger.Error("关闭连接失败",
+				zap.String("instanceID", instanceID),
+				zap.Error(err))
+		} else {
+			logger.Info("关闭连接成功", zap.String("instanceID", instanceID))
+		}
+	}
+	// 再关闭 Transport 的空闲连接，释放文件描述符
+	if conn.Transport != nil {
+		conn.Transport.CloseIdleConnections()
+	}
 }
 
 // StartMaintainer 启动维护协程
@@ -376,60 +436,43 @@ func (c *ConnectionPool) maintainOnce() {
 	c.mutex.RUnlock()
 	logger.Info("检查连接状态...")
 	for _, svc := range services {
-		// 遍历所有实例
-		for _, inst := range svc.InstanceMap {
-			// 1) 拿连接快照
-			inst.mutex.Lock()
-			connsSnapshot := make([]*ExternalConnection, len(inst.Connections))
-			copy(connsSnapshot, inst.Connections)
-			inst.mutex.Unlock()
-
-			// 2) 健康检查（在锁外做 IO）
-			healthy := make([]*ExternalConnection, 0, len(connsSnapshot))
-			for _, conn := range connsSnapshot {
-				if conn == nil || conn.Session == nil {
-					continue
-				}
-				if c.isSessionHealthy(conn.Session) {
-					healthy = append(healthy, conn)
-				} else {
-					// 关闭异常会话
-					_ = conn.Session.Close()
-					logger.Debug("关闭异常会话", zap.String("InstanceId", inst.InstanceId))
-				}
-			}
-
-			// 3) 写回健康列表
-			inst.mutex.Lock()
-			inst.Connections = healthy
-			inst.mutex.Unlock()
-			// 4) 若不足则补齐（使用实例内目标连接数）
-			target := inst.TargetConnections
-			// 补齐数量
-			var i int
-			for {
-				inst.mutex.Lock()
-				current := len(inst.Connections)
-				inst.mutex.Unlock()
-				if current >= target {
-					break
-				}
-
-				// 创建新连接（锁外创建）
-				newConn, err := c.createReplacementConnection(svc, inst, current)
-				if err != nil {
-					logger.Warn("维护补齐连接失败", zap.String("service_name", svc.ServiceName), zap.Error(err))
-					break // 避免紧急重试风暴，留给下次周期
-				}
-
-				// 追加（加锁）
-				inst.mutex.Lock()
-				inst.Connections = append(inst.Connections, newConn)
-				i++
-				inst.mutex.Unlock()
-			}
-			logger.Debug("恢复连接", zap.Int("数量", i))
+		if svc == nil || svc.Instance == nil {
+			continue
 		}
+		inst := svc.Instance
+
+		// 1) 拿连接快照
+		inst.mutex.Lock()
+		conn := inst.Connection
+		inst.mutex.Unlock()
+
+		// 2) 健康检查（在锁外做 IO）
+		if conn != nil && conn.Session != nil && !c.isSessionHealthy(conn.Session) {
+			closeConnection(conn, inst.InstanceId)
+			logger.Debug("关闭异常会话", zap.String("InstanceId", inst.InstanceId))
+			inst.mutex.Lock()
+			if inst.Connection == conn {
+				inst.Connection = nil
+			}
+			inst.mutex.Unlock()
+		}
+
+		// 3) 固定单连接：为空则补齐一条
+		inst.mutex.Lock()
+		needsCreate := inst.Connection == nil || inst.Connection.Session == nil
+		inst.mutex.Unlock()
+		if !needsCreate {
+			continue
+		}
+		newConn, err := c.createReplacementConnection(svc, inst)
+		if err != nil {
+			logger.Warn("维护补齐连接失败", zap.String("service_name", svc.ServiceName), zap.Error(err))
+			continue
+		}
+		inst.mutex.Lock()
+		inst.Connection = newConn
+		inst.mutex.Unlock()
+		logger.Debug("恢复连接", zap.Int("数量", 1))
 	}
 	logger.Debug("检查连接状态完成")
 }
@@ -443,111 +486,52 @@ func (c *ConnectionPool) isSessionHealthy(session *mcp.ClientSession) bool {
 	return err == nil
 }
 
-// createReplacementConnection 针对实例按服务类型创建一个新连接
-func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, inst *ServiceInstance, index int) (*ExternalConnection, error) {
+// createReplacementConnection 针对实例创建一条新的 HTTP 连接。
+func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, inst *ServiceInstance) (*ExternalConnection, error) {
 	ctx := context.Background()
-	switch svc.Type {
-	case "sse":
-		// 优先使用实例快照
-		ci := inst.ResolvedConnectInfo
-		if ci == nil {
-			ci = c.buildConnectInfoForInstance(svc, inst)
-		}
-		connects, err := c.createSSEConnections(ctx, ci, svc.Id, inst.AccountId, 1)
-		if err != nil {
-			return nil, err
-		}
-		if len(connects) > 0 {
-			return connects[0], nil
-		} else {
-			return nil, nil
-		}
-	case "httpStreamable":
-
-		ci := inst.ResolvedConnectInfo
-		if ci == nil {
-			ci = c.buildConnectInfoForInstance(svc, inst)
-		}
-		return c.createHttpStreamableConnections(ctx, ci, svc.Id, inst.AccountId)
-	case "stdio":
-		li := inst.ResolvedLaunchInfo
-		if li == nil {
-			li = c.buildLaunchInfoForInstance(svc, inst)
-		}
-		return c.createStdioConnection(ctx, li, svc.Id, inst.AccountId)
-	default:
-		return nil, fmt.Errorf("不支持的服务类型: %s", svc.Type)
+	if svc == nil || svc.ConnectInfo == nil {
+		return nil, fmt.Errorf("连接配置缺失")
 	}
+	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.Id)
 }
 
-// buildConnectInfoForInstance 合并服务默认 Header 与账号认证信息
-func (c *ConnectionPool) buildConnectInfoForInstance(svc *ExternalService, inst *ServiceInstance) *ConnectInfo {
-	ciCopy := *svc.ConnectInfo
-
-	// 复制 headers 模板（可能为 nil）
-	if svc.ConnectInfo.Headers != nil {
-		ciCopy.Headers = make(map[string]string, len(svc.ConnectInfo.Headers))
-		for k, v := range svc.ConnectInfo.Headers {
-			ciCopy.Headers[k] = v
-		}
-	} else {
-		ciCopy.Headers = nil
+func getAvailableConnection(service *ExternalService) (*ServiceInstance, *ExternalConnection, error) {
+	if service == nil {
+		return nil, nil, fmt.Errorf("服务未初始化")
 	}
-
-	// 按账号做 URL/header 替换与合并（逻辑与实例创建一致）
-	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil && acct.AuthInfo != nil {
-		// URL query 参数占位符替换：$(keyX)=$(VALUE) -> keyX=auth[keyX]
-		ciCopy.Url = replaceURLAuthPlaceholders(ciCopy.Url, acct.AuthInfo)
-
-		// headers：如果模板里存在占位符，走模板替换；否则用 AuthInfo 覆盖合并
-		if ciCopy.Headers != nil {
-			if headersContainAuthPlaceholders(ciCopy.Headers) {
-				ciCopy.Headers = replaceHeaderAuthPlaceholders(ciCopy.Headers, acct.AuthInfo)
-			} else {
-				for k, v := range acct.AuthInfo {
-					ciCopy.Headers[k] = v
-				}
-			}
-		}
+	instance := service.Instance
+	if instance == nil {
+		return nil, nil, fmt.Errorf("没有可用实例")
 	}
-	return &ciCopy
+	instance.mutex.Lock()
+	defer instance.mutex.Unlock()
+	if instance.Connection == nil || instance.Connection.Session == nil {
+		return nil, nil, fmt.Errorf("没有可用的连接")
+	}
+	return instance, instance.Connection, nil
 }
 
-// buildLaunchInfoForInstance 合并进程环境变量与账号认证信息
-func (c *ConnectionPool) buildLaunchInfoForInstance(svc *ExternalService, inst *ServiceInstance) *LaunchInfo {
-	liCopy := *svc.LaunchInfo
-
-	// 复制 env 模板（可能为 nil）
-	if svc.LaunchInfo.Env != nil {
-		liCopy.Env = make(map[string]interface{}, len(svc.LaunchInfo.Env))
-		for k, v := range svc.LaunchInfo.Env {
-			liCopy.Env[k] = v
-		}
-	} else {
-		liCopy.Env = nil
+func (c *ConnectionPool) fastReconnectNodeService(service *ExternalService, instance *ServiceInstance) (*ExternalConnection, error) {
+	if service == nil || instance == nil {
+		return nil, fmt.Errorf("没有可用实例")
 	}
 
-	// 按账号做 Env 替换与合并（逻辑与实例创建一致）
-	if acct := findAccountById(svc.Accounts, inst.AccountId); acct != nil && acct.AuthInfo != nil {
-		if envContainAuthPlaceholders(liCopy.Env) {
-			liCopy.Env = replaceEnvAuthPlaceholders(liCopy.Env, acct.AuthInfo)
-		} else {
-			if liCopy.Env == nil {
-				liCopy.Env = make(map[string]interface{})
-			}
-			for k, v := range acct.AuthInfo {
-				liCopy.Env[k] = v
-			}
-		}
-	}
-	return &liCopy
-}
+	instance.mutex.Lock()
+	oldConnection := instance.Connection
+	instance.Connection = nil
+	instance.mutex.Unlock()
 
-func findAccountById(accounts []*ExternalAccount, id int32) *ExternalAccount {
-	for _, a := range accounts {
-		if a != nil && a.AccountID == id {
-			return a
-		}
+	if oldConnection != nil {
+		closeConnection(oldConnection, instance.InstanceId)
 	}
-	return nil
+
+	newConn, err := c.createReplacementConnection(service, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	instance.mutex.Lock()
+	instance.Connection = newConn
+	instance.mutex.Unlock()
+	return newConn, nil
 }

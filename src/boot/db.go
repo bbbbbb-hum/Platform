@@ -16,7 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 )
 
-func SetupDB() {
+func SetupDB() error {
 	var dbConfig gorm.Dialector
 	connType := config.Get("database.connection")
 	switch connType {
@@ -40,21 +40,30 @@ func SetupDB() {
 
 	case "postgres":
 		// 构建 DSN 信息
-		dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable TimeZone=Asia/Shanghai",
+		dsn := fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=%v TimeZone=%v",
 			config.Get("database.postgres.host"),
 			config.Get("database.postgres.username"),
 			config.Get("database.postgres.password"),
 			config.Get("database.postgres.database"),
 			config.Get("database.postgres.port"),
+			config.Get("database.postgres.sslmode"),
+			config.Get("server.timezone"),
 		)
-		logger.Info("dsn", zap.String("type", "postgres"), zap.String("dsn", dsn))
+		//logger.Info("dsn", zap.String("type", "postgres"), zap.String("dsn", dsn))
+		logger.Info("dsn参数",
+			zap.String("host", config.Get("database.postgres.host")),
+			zap.String("username", config.Get("database.postgres.username")),
+			zap.String("database", config.Get("database.postgres.database")),
+			zap.String("port", config.Get("database.postgres.port")),
+			zap.String("sslmode", config.Get("database.postgres.sslmode")),
+			zap.String("timezone", config.Get("server.timezone")))
 		dbConfig = postgres.New(postgres.Config{
 			DSN:                  dsn,
 			PreferSimpleProtocol: true, // disables implicit prepared statement usage
 		})
 	default:
 		logger.Error("没有该配置！", zap.String("error", "database connection not supported"))
-		return
+		return fmt.Errorf("database connection not supported")
 	}
 	// 连接数据库，并设置 GORM 的日志模式
 	logger.Info("连接数据库...", zap.String("action", "connecting"))
@@ -63,19 +72,19 @@ func SetupDB() {
 	// 检查数据库连接是否成功
 	if database.DB == nil {
 		logger.Error("连接失败", zap.String("error", "database.DB is nil"))
-		return
+		return fmt.Errorf("database connection failed")
 	}
 	// 测试数据库连接（获取 sql.DB）
 	sqlDB, err := database.DB.DB()
 	if err != nil {
 		logger.Error("获取底层数据库连接失败", zap.String("error", err.Error()))
-		return
+		return fmt.Errorf("failed to get underlying database connection")
 	}
 
 	// 检查 database.SQLDB 是否有效
 	if database.SQLDB == nil {
 		logger.Error("database.SQLDB 为 nil，无法设置连接池参数")
-		return
+		return fmt.Errorf("database.SQLDB is nil")
 	}
 
 	// 基于当前驱动读取连接池参数（避免读取到不存在的顶层键导致无限制）
@@ -115,9 +124,11 @@ func SetupDB() {
 	logger.Info("数据库连接池配置成功！", zap.String("status", "connection pools configured"))
 	if err = sqlDB.Ping(); err != nil {
 		logger.Error("数据库连接测试失败", zap.String("error", err.Error()))
+		return fmt.Errorf("database connection test failed")
 	}
 	logger.Info("数据连接成功！", zap.String("status", "connected successfully"))
 	// database.DB.AutoMigrate(&user.User{})
+	return nil
 }
 
 // GetDB 获取数据库连接实例

@@ -1,13 +1,17 @@
 package servers
 
 import (
+	"AgentEarth_AgentPlatform/src/helpers"
+	"AgentEarth_AgentPlatform/src/helpers/cache"
 	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/task_chain"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -133,6 +137,9 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	//
 	var toolModelList = []*models.AeMcpTools{}
 	for _, tool := range server.toolDescList {
+		// 在工具描述中添加价格信息
+		tool.ToolDesc = fmt.Sprintf("%s (Price: %.8f XLCredit)", tool.ToolDesc, service.XlcreditPrice)
+
 		// 注册工具，捕获并跳过可能的 panic
 		if !safeAddTool(server, tool) {
 			logger.Warn("注册工具失败，已跳过", zap.String("tool_name", tool.ToolName))
@@ -152,13 +159,19 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 		}
 		// 新增工具
 		toolModel := models.AeMcpTools{
-			Id:          0,
-			ServiceId:   service.Id,
-			Name:        tool.ToolName,
-			Description: tool.ToolDesc,
-			ArgsSchema:  schemaMap,
-			CreateTime:  time.Now(),
-			UpdateTime:  time.Now(),
+			Id:            0,
+			ServiceId:     service.Id,
+			Name:          tool.ToolName,
+			Description:   tool.ToolDesc,
+			ArgsSchema:    schemaMap,
+			CreateTime:    time.Now(),
+			UpdateTime:    time.Now(),
+			XlcreditPrice: service.XlcreditPrice,
+		}
+		// 缓存工具调用价格到Redis
+		err = cache.SetToolsPrice(service.ServerId, tool.ToolName, service.XlcreditPrice)
+		if err != nil {
+			logger.Error("设置工具价格失败", zap.String("server_id", service.ServerId), zap.String("tool_name", tool.ToolName), zap.Error(err))
 		}
 		toolModelList = append(toolModelList, &toolModel)
 	}
@@ -194,7 +207,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 获取调用次数上限与tokens
 	var serviceLimitModel = &models.AeMcpServicesLimit{}
 	err = serviceLimitModel.GetOneByServerId(service.ServerId)
-	if err != nil {
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error("获取服务调用限制失败", zap.Error(err))
 	}
 	server.LimitType = serviceLimitModel.LimitType
@@ -226,18 +239,76 @@ func safeAddTool(server *Server, tool *types.ToolDesc) (ok bool) {
 
 // OnCallTool 新的工具调用处理器
 func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args map[string]interface{}) (*mcp.CallToolResult, interface{}, error) {
+	// 记录开始时间
+	startTime := time.Now()
+
 	toolName := req.Params.Name
+	userId, ok := ctx.Value(helpers.ContextKeyUserID).(string)
+	if !ok {
+		return nil, nil, errors.New("user information not obtained")
+	}
+	keyId, ok := ctx.Value("key_id").(int64)
+	if !ok {
+		return nil, nil, errors.New("key_id not obtained")
+	}
 	// 创建节点上下文
 	ctxNode := &types.RunningContext{
 		ChainID:   s.ChainInstance.ChainID,
 		ServiceID: s.ChainInstance.ServerID,
-		Stats:     make(map[string]interface{}),
+		Stats: map[string]interface{}{
+			"user_id": userId,
+			"key_id":  keyId,
+		},
 	}
 	logger.Debug("开始处理", zap.String("tool_name", toolName))
+
 	// 链处理
 	result, err := s.ChainInstance.Process(ctxNode, toolName, args)
+
+	// 计算耗时
+	duration := time.Since(startTime)
+
+	// 确定isError和消息
+	var isError bool
+	var message string
+	if err != nil {
+		// 1. 工具链调用错误
+		isError = true
+		message = err.Error()
+	} else {
+		// 2. 工具链调用正确，直接从结构体中获取isError和message
+		isError = result.IsError
+		// 只有当isError为true时才设置message
+		if isError && len(result.Content) > 0 {
+			if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
+				message = textContent.Text
+			}
+		}
+	}
+
+	// 从context获取apiKeyName和userID
+	apiKeyName := ""
+	if val, ok := ctx.Value(helpers.ContextKeyApiKeyName).(string); ok {
+		apiKeyName = val
+	}
+
+	// 直接输出日志
+	logger.Logger.Info("MCP服务日志",
+		zap.String("log_type", "AgentGWCall"),                                     // 0. 必须存在的字段 -- "AgentGWCall"
+		zap.String("user_id", userId),                                             // 1. 用户ID
+		zap.String("apikey_name", apiKeyName),                                     // 2. apikey的名称
+		zap.String("service_name", s.ServerName),                                  // 3. 访问的服务名称
+		zap.String("method", toolName),                                            // 4. 访问的服务中的工具名称
+		zap.Any("param", args),                                                    // 5. 访问服务需要的参数列表
+		zap.Bool("is_error", isError),                                             // 6. 是否为错误
+		zap.String("msg", message),                                                // 7. 当MCP失败时，错误信息
+		zap.Any("response_data", result),                                          // 8. 返回给用户的内容
+		zap.String("duration_ms", strconv.FormatInt(duration.Milliseconds(), 10)), // 9. 调用时间 -- ms
+	)
+
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return result, result.StructuredContent, nil
 }
