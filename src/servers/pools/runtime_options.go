@@ -10,6 +10,8 @@ const (
 	defaultConnectTimeoutMS = 30000
 	defaultListToolsTimeout = 15000
 	defaultCallTimeoutMS    = 30000
+	defaultNodeMaxConnect   = 1
+	maxNodeMaxConnect       = 8
 	nodeServicePrefix       = "node:"
 )
 
@@ -31,6 +33,20 @@ func getCallTimeoutMS(connectInfo *ConnectInfo) int {
 	return helperConfig.GetInt("MCP_CALL_TIMEOUT_MS", defaultCallTimeoutMS)
 }
 
+func getNodeMaxConnect(requested int) int {
+	val := requested
+	if val <= 0 {
+		val = helperConfig.GetInt("MCP_NODE_MAX_CONNECT", defaultNodeMaxConnect)
+	}
+	if val <= 0 {
+		return defaultNodeMaxConnect
+	}
+	if val > maxNodeMaxConnect {
+		return maxNodeMaxConnect
+	}
+	return val
+}
+
 func buildNodeServiceKey(nodeID int32) string {
 	return nodeServicePrefix + strconv.FormatInt(int64(nodeID), 10)
 }
@@ -46,4 +62,3 @@ func parseNodeIDFromServiceKey(nodeServiceKey string) int32 {
 	}
 	return int32(id)
 }
-

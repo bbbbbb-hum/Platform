@@ -22,13 +22,13 @@ type ProxyNode struct {
 func (p *ProxyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化代理节点", zap.Int32("node_id", config.NodeModel.Id))
 	p.NodeInfo = &types.NodeInfo{
-		ServiceID:               config.ServiceID,
-		ChainID:                 config.ChainModel.Id,
-		NodeID:                  config.NodeModel.Id,
-		NodeHandle:              config.NodeModel.NodeHandle,
-		NodeName:                config.NodeModel.NodeName,
-		Description:             config.NodeModel.Description,
-		Enabled:                 true,
+		ServiceID:   config.ServiceID,
+		ChainID:     config.ChainModel.Id,
+		NodeID:      config.NodeModel.Id,
+		NodeHandle:  config.NodeModel.NodeHandle,
+		NodeName:    config.NodeModel.NodeName,
+		Description: config.NodeModel.Description,
+		Enabled:     true,
 	}
 
 	// 仅支持 node_config 链路：从 node_config 初始化。
@@ -37,7 +37,8 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 		p.NodeInfo.NodeURL = nodeCfg.URL
 		p.NodeInfo.Protocol = nodeCfg.Protocol
 		p.NodeInfo.TimeoutMS = nodeCfg.TimeoutMS
-		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.TimeoutMS); err != nil {
+		// 预热连接池：节点初始化阶段就尝试建连并拉工具，减少首调用冷启动。
+		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.TimeoutMS, nodeCfg.MaxConnect); err != nil {
 			logger.Error("初始化 node_config MCP服务失败", zap.Error(err), zap.Int32("node_id", config.NodeModel.Id))
 		} else {
 			logger.Info("代理节点通过 node_config 初始化完成",
@@ -57,6 +58,7 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 // GetTools 获取工具列表 - 从外部MCP服务获取工具
 func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 
+	// 工具描述来自连接池缓存（InitializeNode 时已通过 ListTools 读取）。
 	externalTools := pools.GetConnectPool().GetNodeTools(p.NodeInfo.NodeID)
 	logger.Debug("工具列表(node)", zap.Int("工具数量", len(externalTools)))
 	for _, tool := range externalTools {
@@ -64,6 +66,7 @@ func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types
 		b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
 		logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
 		p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
+		// 统一 schema 版本，避免不同上游服务返回版本不一致导致前端渲染差异。
 		if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
 			tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
 		}
