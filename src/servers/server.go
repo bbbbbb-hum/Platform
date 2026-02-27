@@ -47,6 +47,7 @@ func Initialize() error {
 	logger.Info("从数据库获取到MCP服务记录", zap.Int("count", len(serviceList)))
 
 	// 清空现有的服务映射表
+	// 语义：本次启动/重载以数据库当前配置为准，旧缓存全部丢弃重建。
 	McpServicesMap = make(map[string]*Server)
 	// 遍历服务列表，为每个启用的服务创建实例
 	enabledCount := 0
@@ -59,6 +60,7 @@ func Initialize() error {
 		// 创建MCP服务实例
 		server := createMcpServer(service)
 		if server != nil {
+			// key 使用 server_id，对应网关访问路径 /mcp-server/{server_id}
 			McpServicesMap[service.ServerId] = server
 			enabledCount++
 			logger.Info("成功加载MCP服务", zap.String("server_name", service.ServerName), zap.String("server_id", service.ServerId))
@@ -130,6 +132,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	// 将链挂到server下中
 	server.ChainInstance = chainInstance
 	// 获取工具列表并注册
+	// 注意：工具列表是链上各节点聚合后的结果（尤其含 proxy 节点透出的外部工具）。
 	server.toolDescList = server.ChainInstance.GetTools(&types.RunningContext{})
 
 	//
@@ -158,6 +161,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 			}
 		}
 		// 新增工具
+		// 这里写库是为了给管理侧展示“当前可用工具快照”。
 		toolModel := models.AeMcpTools{
 			Id:            0,
 			ServiceId:     service.Id,
@@ -177,6 +181,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	}
 	if len(toolModelList) > 0 {
 		db := models.GetDB()
+		// 工具元数据使用“先删后插”方式保持和当前链配置一致。
 		err = db.Transaction(func(tx *gorm.DB) error {
 			if err = tx.Where("service_id=?", service.Id).Delete(&models.AeMcpTools{}).Error; err != nil {
 				return err
@@ -197,6 +202,7 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 		}
 	} else {
 		//下线无工具服务
+		// 无可用工具时直接将服务标记为下线，避免网关暴露空服务。
 		err = service.UpdateEnabled(false)
 		if err != nil {
 			logger.Error("下线服务失败", zap.Error(err))
@@ -243,6 +249,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	startTime := time.Now()
 
 	toolName := req.Params.Name
+	// 网关鉴权中间件会在 ctx 注入 user_id / key_id，这里读取用于审计日志。
 	userId, ok := ctx.Value(helpers.ContextKeyUserID).(string)
 	if !ok {
 		return nil, nil, errors.New("user information not obtained")
@@ -252,6 +259,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 		return nil, nil, errors.New("key_id not obtained")
 	}
 	// 创建节点上下文
+	// 运行上下文会贯穿整条任务链，节点可通过 Stats 读取调用方信息。
 	ctxNode := &types.RunningContext{
 		ChainID:   s.ChainInstance.ChainID,
 		ServiceID: s.ChainInstance.ServerID,
@@ -263,6 +271,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	logger.Debug("开始处理", zap.String("tool_name", toolName))
 
 	// 链处理
+	// 链路执行顺序由 task_chain.NodeInstances 决定。
 	result, err := s.ChainInstance.Process(ctxNode, toolName, args)
 
 	// 计算耗时
@@ -293,6 +302,7 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	}
 
 	// 直接输出日志
+	// 这是网关侧核心审计日志，字段顺序与下游日志消费约定保持一致。
 	logger.Logger.Info("MCP服务日志",
 		zap.String("log_type", "AgentGWCall"),                                     // 0. 必须存在的字段 -- "AgentGWCall"
 		zap.String("user_id", userId),                                             // 1. 用户ID
