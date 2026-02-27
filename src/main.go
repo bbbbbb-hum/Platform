@@ -208,6 +208,27 @@ func main() {
 			}
 			w.Write([]byte("MCP服务初始化完成"))
 		})
+
+		// 热更新聚合节点配置接口
+		mux.HandleFunc("/debug/mcp-server/reload/{server_id}", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			serverID := r.URL.Path[len("/debug/mcp-server/reload/"):]
+			if serverID == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("server_id is required"))
+				return
+			}
+			if err := servers.ReloadAggregateNodes(serverID); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("reload success"))
+		})
 	}
 
 	// 使用 Prometheus 中间件包装（先包装 Handler，再添加认证，最后添加指标收集）

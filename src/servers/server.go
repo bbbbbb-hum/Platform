@@ -322,3 +322,32 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 
 	return result, result.StructuredContent, nil
 }
+
+// ReloadAggregateNodes 热更新指定服务的聚合节点配置
+func ReloadAggregateNodes(serverID string) error {
+	server, ok := McpServicesMap[serverID]
+	if !ok || server == nil {
+		return fmt.Errorf("server_not_found: %s", serverID)
+	}
+
+	// 遍历链上的节点，找到聚合节点并刷新
+	for _, nodeInstance := range server.ChainInstance.NodeInstances {
+		if nodeInstance.NodeInfo.NodeHandle == "aggregate_handle" {
+			// 从数据库重新读取配置
+			nodeModel := &models.AeMcpTaskNode{}
+			err, nodes := nodeModel.GetChianNodes([]int32{nodeInstance.NodeInfo.NodeID})
+			if err != nil || len(nodes) == 0 {
+				return fmt.Errorf("get_node_config_failed: %w", err)
+			}
+			// 调用 RefreshConfig
+			if agg, ok := nodeInstance.Node.(interface{ RefreshConfig(string) error }); ok {
+				if err := agg.RefreshConfig(nodes[0].NodeConfig); err != nil {
+					return fmt.Errorf("refresh_config_failed: %w", err)
+				}
+			}
+		}
+	}
+
+	logger.Info("聚合节点热更新完成", zap.String("server_id", serverID))
+	return nil
+}

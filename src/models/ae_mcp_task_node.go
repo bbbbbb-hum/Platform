@@ -49,3 +49,13 @@ func sortAeMcpTaskNode(nodeIds []int32, nodeList []*AeMcpTaskNode) []*AeMcpTaskN
 
 	return sortedNodes
 }
+
+// GetByNodeName 根据节点名称查询节点
+func (m *AeMcpTaskNode) GetByNodeName(nodeName string) (*AeMcpTaskNode, error) {
+	var node AeMcpTaskNode
+	err := GetDB().Where("node_name = ? AND enabled = ?", nodeName, true).First(&node).Error
+	if err != nil {
+		return nil, err
+	}
+	return &node, nil
+}
