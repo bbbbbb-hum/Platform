@@ -28,7 +28,6 @@ func (e *EchoNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	return nil
 }

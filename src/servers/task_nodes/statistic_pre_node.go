@@ -29,7 +29,6 @@ func (s *StatisticPreNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	logger.Info("前置统计节点初始化完成，不提供任何工具")
 	return nil

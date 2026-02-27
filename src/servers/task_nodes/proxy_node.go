@@ -7,19 +7,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
 )
 
-// ProxyNode SSE代理节点，用于代理SSE类型的MCP服务
+// ProxyNode HTTP代理节点，用于代理外部 MCP 服务。
 type ProxyNode struct {
 	NodeInfo *types.NodeInfo //节点信息
 }
 
-// Init 初始化SSE代理节点
+// Init 初始化代理节点
 func (p *ProxyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化代理节点", zap.Int32("node_id", config.NodeModel.Id))
 	p.NodeInfo = &types.NodeInfo{
@@ -30,17 +29,16 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 
-	// 新链路优先：从 node_config 初始化。
+	// 仅支持 node_config 链路：从 node_config 初始化。
 	nodeCfg, nodeErr := ParseNodeRuntimeConfig(config.NodeModel.NodeConfig)
 	if nodeErr == nil && nodeCfg != nil {
 		p.NodeInfo.NodeURL = nodeCfg.URL
 		p.NodeInfo.Protocol = nodeCfg.Protocol
 		p.NodeInfo.TimeoutMS = nodeCfg.TimeoutMS
 		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.TimeoutMS); err != nil {
-			logger.Error("初始化 node_config MCP服务失败，尝试回退旧链路", zap.Error(err), zap.Int32("node_id", config.NodeModel.Id))
+			logger.Error("初始化 node_config MCP服务失败", zap.Error(err), zap.Int32("node_id", config.NodeModel.Id))
 		} else {
 			logger.Info("代理节点通过 node_config 初始化完成",
 				zap.Int32("node_id", config.NodeModel.Id),
@@ -49,64 +47,31 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 		}
 	}
 
-	// 兼容旧链路：初始化外部MCP服务。
-	if strings.TrimSpace(config.NodeModel.ExternalServiceId) != "" {
-		if err := pools.GetConnectPool().InitializeService(config.NodeModel.ExternalServiceId); err != nil {
-			logger.Error("初始化外部 MCP服务失败", zap.Error(err))
-			return err
-		}
-		logger.Info("代理节点通过旧链路初始化完成", zap.Int32("node_id", config.NodeModel.Id))
-		return nil
-	}
-
-	// 两条链路均不可用时返回清晰错误。
+	// node_config 不可用时返回清晰错误。
 	if nodeErr != nil {
 		return fmt.Errorf("invalid_node_config: %w", nodeErr)
 	}
-	return fmt.Errorf("invalid_node_config: both node_config.url and external_service_id are empty")
+	return fmt.Errorf("invalid_node_config: node_config.url is required")
 }
 
 // GetTools 获取工具列表 - 从外部MCP服务获取工具
 func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 
-	// 优先新链路：按 node_id 获取工具。
-	if strings.TrimSpace(p.NodeInfo.NodeURL) != "" {
-		externalTools := pools.GetConnectPool().GetNodeTools(p.NodeInfo.NodeID)
-		logger.Debug("工具列表(node)", zap.Int("工具数量", len(externalTools)))
-		for _, tool := range externalTools {
-			CleanDefaultNull(tool.InputSchema)
-			b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
-			logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
-			p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
-			if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
-				tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
-			}
-			currentToolList = append(currentToolList, &types.ToolDesc{
-				ToolDesc:        tool.Description,
-				ToolInputSchema: tool.InputSchema,
-				ToolName:        tool.Name,
-			})
+	externalTools := pools.GetConnectPool().GetNodeTools(p.NodeInfo.NodeID)
+	logger.Debug("工具列表(node)", zap.Int("工具数量", len(externalTools)))
+	for _, tool := range externalTools {
+		CleanDefaultNull(tool.InputSchema)
+		b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
+		logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
+		p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
+		if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
+			tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
 		}
-	} else if p.NodeInfo.ExternalServiceConfigID != "" {
-		// 兼容旧链路：从连接池获取外部服务的工具。
-		externalTools := pools.GetConnectPool().GetServiceTools(p.NodeInfo.ExternalServiceConfigID)
-		logger.Debug("工具列表", zap.Int("工具数量", len(externalTools)))
-		for _, tool := range externalTools {
-			CleanDefaultNull(tool.InputSchema)
-			b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
-			logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
-			// 将该节点上贡献的工具名称保存到节点信息中
-			p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
-			// 修改工具输入参数的schema的版本
-			if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
-				tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
-			}
-			currentToolList = append(currentToolList, &types.ToolDesc{
-				ToolDesc:        tool.Description,
-				ToolInputSchema: tool.InputSchema,
-				ToolName:        tool.Name,
-			})
-		}
+		currentToolList = append(currentToolList, &types.ToolDesc{
+			ToolDesc:        tool.Description,
+			ToolInputSchema: tool.InputSchema,
+			ToolName:        tool.Name,
+		})
 	}
 
 	logger.Info("代理节点获取工具列表", zap.Int("工具数量", len(currentToolList)))
@@ -120,12 +85,7 @@ func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamM
 		currentResp = lastStepResp
 	}
 
-	if strings.TrimSpace(p.NodeInfo.NodeURL) != "" {
-		currentResp, err = pools.GetConnectPool().CallToolByNode(p.NodeInfo.NodeID, userCmd, userParamMap)
-	} else {
-		// 兼容旧链路。
-		currentResp, err = pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)
-	}
+	currentResp, err = pools.GetConnectPool().CallToolByNode(p.NodeInfo.NodeID, userCmd, userParamMap)
 	if err != nil {
 		return
 	}

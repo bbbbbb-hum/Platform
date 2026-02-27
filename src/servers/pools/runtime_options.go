@@ -7,36 +7,11 @@ import (
 )
 
 const (
-	defaultEnabledProtocols = "http"
 	defaultConnectTimeoutMS = 30000
 	defaultListToolsTimeout = 15000
 	defaultCallTimeoutMS    = 30000
 	nodeServicePrefix       = "node:"
 )
-
-func getEnabledProtocols() map[string]bool {
-	raw := strings.TrimSpace(helperConfig.GetString("ENABLED_PROTOCOLS", defaultEnabledProtocols))
-	if raw == "" {
-		raw = defaultEnabledProtocols
-	}
-	items := strings.Split(strings.ToLower(raw), ",")
-	result := make(map[string]bool, len(items))
-	for _, item := range items {
-		p := strings.TrimSpace(item)
-		if p != "" {
-			result[p] = true
-		}
-	}
-	return result
-}
-
-func isProtocolEnabled(protocol string) bool {
-	p := strings.ToLower(strings.TrimSpace(protocol))
-	if p == "" {
-		p = "http"
-	}
-	return getEnabledProtocols()[p]
-}
 
 func getConnectTimeoutMS(connectInfo *ConnectInfo) int {
 	if connectInfo != nil && connectInfo.ConnectTimeout > 0 {
@@ -56,15 +31,15 @@ func getCallTimeoutMS(connectInfo *ConnectInfo) int {
 	return helperConfig.GetInt("MCP_CALL_TIMEOUT_MS", defaultCallTimeoutMS)
 }
 
-func buildNodeServiceID(nodeID int32) string {
+func buildNodeServiceKey(nodeID int32) string {
 	return nodeServicePrefix + strconv.FormatInt(int64(nodeID), 10)
 }
 
-func parseNodeIDFromServiceID(serviceID string) int32 {
-	if !strings.HasPrefix(serviceID, nodeServicePrefix) {
+func parseNodeIDFromServiceKey(nodeServiceKey string) int32 {
+	if !strings.HasPrefix(nodeServiceKey, nodeServicePrefix) {
 		return 0
 	}
-	raw := strings.TrimPrefix(serviceID, nodeServicePrefix)
+	raw := strings.TrimPrefix(nodeServiceKey, nodeServicePrefix)
 	id, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil {
 		return 0
