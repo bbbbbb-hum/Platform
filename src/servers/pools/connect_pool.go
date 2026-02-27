@@ -494,6 +494,8 @@ func (c *ConnectionPool) maintainOnce() {
 			continue
 		}
 		inst := svc.Instance
+		nodeServiceKey := svc.NodeServiceKey
+		nodeID := parseNodeIDFromServiceKey(nodeServiceKey)
 
 		// 1) 拿连接快照：只短暂持有实例锁，不在锁内做网络 IO。
 		inst.mutex.Lock()
@@ -513,8 +515,10 @@ func (c *ConnectionPool) maintainOnce() {
 			}
 			if !c.isSessionHealthy(conn.Session) {
 				closeConnection(conn, inst.InstanceId)
-				logger.Debug("关闭异常会话",
-					zap.String("InstanceId", inst.InstanceId),
+				logger.Warn("关闭异常会话",
+					zap.String("instance_id", inst.InstanceId),
+					zap.String("node_service_key", nodeServiceKey),
+					zap.Int32("node_id", nodeID),
 					zap.Int("connection_index", idx))
 				continue
 			}
@@ -532,6 +536,9 @@ func (c *ConnectionPool) maintainOnce() {
 			if err != nil {
 				logger.Warn("维护补齐连接失败",
 					zap.String("service_name", svc.ServiceName),
+					zap.String("instance_id", inst.InstanceId),
+					zap.String("node_service_key", nodeServiceKey),
+					zap.Int32("node_id", nodeID),
 					zap.Int("target_connections", targetConnections),
 					zap.Int("current_connections", currentConnections),
 					zap.Error(err))
@@ -543,10 +550,23 @@ func (c *ConnectionPool) maintainOnce() {
 			inst.mutex.Unlock()
 			createdCount++
 		}
-		logger.Debug("恢复连接",
-			zap.Int("created_connections", createdCount),
-			zap.Int("target_connections", targetConnections),
-			zap.Int("current_connections", currentConnections))
+		if createdCount > 0 {
+			logger.Info("恢复连接",
+				zap.String("instance_id", inst.InstanceId),
+				zap.String("node_service_key", nodeServiceKey),
+				zap.Int32("node_id", nodeID),
+				zap.Int("created_connections", createdCount),
+				zap.Int("target_connections", targetConnections),
+				zap.Int("current_connections", currentConnections))
+		} else {
+			logger.Debug("恢复连接",
+				zap.String("instance_id", inst.InstanceId),
+				zap.String("node_service_key", nodeServiceKey),
+				zap.Int32("node_id", nodeID),
+				zap.Int("created_connections", createdCount),
+				zap.Int("target_connections", targetConnections),
+				zap.Int("current_connections", currentConnections))
+		}
 	}
 	logger.Debug("检查连接状态完成")
 }

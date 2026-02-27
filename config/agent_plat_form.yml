@@ -22,7 +22,7 @@ DB_MAX_OPEN_CONNECTIONS: 20 #数据库最大打开连接数
 DB_MAX_LIFE_SECONDS: 300 #数据库连接最大生命周期
 DB_SSLMODE: disable #数据库SSL模式
   
-LOG_LEVEL: debug #日志等级
+LOG_LEVEL: info #日志等级
 LOG_TYPE: console #日志类型 只有一个 console 选项
 
 REDIS_ADDR: 127.0.0.1:6379 #redis地址
@@ -49,7 +49,7 @@ NATS_STREAM_MAX_AGE_HOURS: 24 #消息最大保留时间（小时）
 NATS_STREAM_REPLICAS: 1 # 流副本数
 
 NAMESPACE: local-dev # pod命名空间
-LOG_LEVEL: debug //日志等级
+LOG_LEVEL: info //日志等级
 LOG_TYPE: console //日志类型 只有一个 console 选项
 
 ENABLED_PROTOCOLS: http // 协议开关，默认仅启用http
