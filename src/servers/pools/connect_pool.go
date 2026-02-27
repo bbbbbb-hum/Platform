@@ -275,6 +275,17 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 	if err != nil {
 		return nil, err
 	}
+	nodeID := parseNodeIDFromServiceKey(nodeServiceKey)
+	argsCount := 0
+	if args != nil {
+		argsCount = len(args)
+	}
+	logger.Info("call_tool start",
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int32("node_id", nodeID),
+		zap.String("tool_name", toolName),
+		zap.Int("selected_connection_index", connectionIndex),
+		zap.Int("args_count", argsCount))
 
 	// callOnce 封装单次调用，便于首调与重试复用完全一致的超时/日志语义。
 	callOnce := func(conn *ExternalConnection) (*mcp.CallToolResult, string, error, int64) {
@@ -303,6 +314,14 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 
 	result, errorType, callErr, elapsedMS := callOnce(connection)
 	if callErr == nil {
+		logger.Info("call_tool end",
+			zap.String("node_service_key", nodeServiceKey),
+			zap.Int32("node_id", nodeID),
+			zap.String("tool_name", toolName),
+			zap.Int("selected_connection_index", connectionIndex),
+			zap.Bool("success", true),
+			zap.Int("attempt", 1),
+			zap.Int64("latency_ms", elapsedMS))
 		return result, nil
 	}
 
@@ -314,7 +333,7 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 		zap.Int64("elapsed_ms", elapsedMS),
 		zap.Int("attempt", 1),
 		zap.String("node_service_key", nodeServiceKey),
-		zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+		zap.Int32("node_id", nodeID),
 		zap.Int("connection_index", connectionIndex),
 		zap.String("tool_name", toolName),
 		zap.Error(callErr))
@@ -327,10 +346,18 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 			zap.String("error_type", "reconnect_failed"),
 			zap.Int("attempt", 1),
 			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+			zap.Int32("node_id", nodeID),
 			zap.Int("connection_index", connectionIndex),
 			zap.String("tool_name", toolName),
 			zap.Error(reconnectErr))
+		logger.Info("call_tool end",
+			zap.String("node_service_key", nodeServiceKey),
+			zap.Int32("node_id", nodeID),
+			zap.String("tool_name", toolName),
+			zap.Int("selected_connection_index", connectionIndex),
+			zap.Bool("success", false),
+			zap.Int("attempt", 1),
+			zap.Int64("latency_ms", elapsedMS))
 		return nil, fmt.Errorf("%s: %v", errorType, callErr)
 	}
 
@@ -344,18 +371,34 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 			zap.Int64("elapsed_ms", retryElapsedMS),
 			zap.Int("attempt", 2),
 			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+			zap.Int32("node_id", nodeID),
 			zap.Int("connection_index", connectionIndex),
 			zap.String("tool_name", toolName),
 			zap.Error(retryErr))
+		logger.Info("call_tool end",
+			zap.String("node_service_key", nodeServiceKey),
+			zap.Int32("node_id", nodeID),
+			zap.String("tool_name", toolName),
+			zap.Int("selected_connection_index", connectionIndex),
+			zap.Bool("success", false),
+			zap.Int("attempt", 2),
+			zap.Int64("latency_ms", retryElapsedMS))
 		return nil, fmt.Errorf("%s: %v", retryErrorType, retryErr)
 	}
 
 	logger.Warn("call_tool recovered after reconnect",
 		zap.String("node_service_key", nodeServiceKey),
-		zap.Int32("node_id", parseNodeIDFromServiceKey(nodeServiceKey)),
+		zap.Int32("node_id", nodeID),
 		zap.Int("connection_index", connectionIndex),
 		zap.String("tool_name", toolName))
+	logger.Info("call_tool end",
+		zap.String("node_service_key", nodeServiceKey),
+		zap.Int32("node_id", nodeID),
+		zap.String("tool_name", toolName),
+		zap.Int("selected_connection_index", connectionIndex),
+		zap.Bool("success", true),
+		zap.Int("attempt", 2),
+		zap.Int64("latency_ms", retryElapsedMS))
 	return result, nil
 }
 
