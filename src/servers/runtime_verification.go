@@ -2,7 +2,6 @@ package servers
 
 import (
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
-	"AgentEarth_AgentPlatform/src/helpers/logger"
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/task_nodes"
@@ -13,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type runtimeConnectReq struct {
@@ -80,27 +77,87 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	// node_id -> 读取 ae_mcp_task_node.node_config（url/protocol/timeout）
-	node, cfg, err := loadRuntimeNodeConfig(int32(req.NodeID))
+	var node models.AeMcpTaskNode
+	if err := models.GetDB().Where("id = ?", int32(req.NodeID)).First(&node).Error; err != nil {
+		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(node.NodeHandle) == "aggregate_handle" {
+		names, err := task_nodes.ParseAggregateConfig(node.NodeConfig)
+		if err != nil {
+			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		timeoutMS := 0
+		if req.Timeout > 0 {
+			timeoutMS = req.Timeout * 1000
+		}
+		type subInfo struct {
+			name string
+			id   int32
+		}
+		subNodes := make([]subInfo, 0, len(names))
+		for _, n := range names {
+			sub, e := (&models.AeMcpTaskNode{}).GetByNodeName(n)
+			if e != nil || sub == nil || !sub.Enabled {
+				continue
+			}
+			cfg, e := task_nodes.ParseNodeRuntimeConfig(sub.NodeConfig)
+			if e != nil {
+				continue
+			}
+			tms := cfg.TimeoutMS
+			if timeoutMS > 0 {
+				tms = timeoutMS
+			}
+			if err := pools.GetConnectPool().InitializeNode(sub.Id, cfg.Protocol, cfg.URL, tms, cfg.MaxConnect); err != nil {
+				continue
+			}
+			subNodes = append(subNodes, subInfo{name: strings.ReplaceAll(n, " ", ""), id: sub.Id})
+		}
+		toolList := make([]map[string]interface{}, 0, 16)
+		for _, si := range subNodes {
+			tools := pools.GetConnectPool().GetNodeTools(si.id)
+			for _, tool := range tools {
+				if tool == nil {
+					continue
+				}
+				name := si.name + "_" + tool.Name
+				item := map[string]interface{}{
+					"name":        name,
+					"description": tool.Description,
+				}
+				if tool.InputSchema != nil {
+					item["inputSchema"] = tool.InputSchema
+				}
+				toolList = append(toolList, item)
+			}
+		}
+		resp := map[string]interface{}{
+			"success":     true,
+			"node_id":     req.NodeID,
+			"service_url": "",
+			"tools":       toolList,
+			"tools_count": len(toolList),
+			"duration_ms": time.Since(start).Milliseconds(),
+		}
+		writeRuntimeJSON(w, http.StatusOK, resp)
+		return
+	}
+	nodeRec, cfg, err := loadRuntimeNodeConfig(int32(req.NodeID))
 	if err != nil {
 		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
-
 	timeoutMS := cfg.TimeoutMS
 	if req.Timeout > 0 {
-		// 前端传的是秒，这里统一换算为毫秒给连接池。
 		timeoutMS = req.Timeout * 1000
 	}
-	// InitializeNode 负责：连接复用、首次建连、拉取工具列表。
-	if err := pools.GetConnectPool().InitializeNode(node.Id, cfg.Protocol, cfg.URL, timeoutMS, cfg.MaxConnect); err != nil {
-		logger.Error("runtime connect failed", zap.Int64("node_id", req.NodeID), zap.Error(err))
+	if err := pools.GetConnectPool().InitializeNode(nodeRec.Id, cfg.Protocol, cfg.URL, timeoutMS, cfg.MaxConnect); err != nil {
 		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfg.URL)})
 		return
 	}
-
-	tools := pools.GetConnectPool().GetNodeTools(node.Id)
-	// 返回轻量工具结构：只暴露必要字段，避免把内部对象原样透出。
+	tools := pools.GetConnectPool().GetNodeTools(nodeRec.Id)
 	toolList := make([]map[string]interface{}, 0, len(tools))
 	for _, tool := range tools {
 		if tool == nil {
@@ -115,7 +172,6 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		toolList = append(toolList, item)
 	}
-
 	resp := map[string]interface{}{
 		"success":     true,
 		"node_id":     req.NodeID,
@@ -124,7 +180,7 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 		"tools_count": len(toolList),
 		"duration_ms": time.Since(start).Milliseconds(),
 	}
-	if poolState := pools.GetConnectPool().GetNodePoolState(node.Id); poolState != nil {
+	if poolState := pools.GetConnectPool().GetNodePoolState(nodeRec.Id); poolState != nil {
 		resp["node_service_key"] = poolState.NodeServiceKey
 		resp["active_connections"] = poolState.ActiveConnections
 		resp["target_connections"] = poolState.TargetConnections
@@ -151,20 +207,98 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	// 每次 call 前执行一次 InitializeNode：如果连接已存在会直接复用；
-	// 若连接失活则由连接池内部恢复，调用方无需感知连接状态机。
-	node, cfg, err := loadRuntimeNodeConfig(int32(req.NodeID))
+	var node models.AeMcpTaskNode
+	if err := models.GetDB().Where("id = ?", int32(req.NodeID)).First(&node).Error; err != nil {
+		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(node.NodeHandle) == "aggregate_handle" {
+		parts := strings.SplitN(strings.TrimSpace(req.ToolName), "_", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid_aggregated_tool"})
+			return
+		}
+		targetClean := strings.TrimSpace(parts[0])
+		origTool := strings.TrimSpace(parts[1])
+		names, err := task_nodes.ParseAggregateConfig(node.NodeConfig)
+		if err != nil {
+			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		var sub *models.AeMcpTaskNode
+		for _, n := range names {
+			if strings.ReplaceAll(n, " ", "") == targetClean {
+				sub, err = (&models.AeMcpTaskNode{}).GetByNodeName(n)
+				if err != nil || sub == nil || !sub.Enabled {
+					sub = nil
+				}
+				break
+			}
+		}
+		if sub == nil {
+			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "aggregated_target_not_found"})
+			return
+		}
+		cfgSub, err := task_nodes.ParseNodeRuntimeConfig(sub.NodeConfig)
+		if err != nil {
+			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
+			return
+		}
+		timeoutMS := cfgSub.TimeoutMS
+		if req.Timeout > 0 {
+			timeoutMS = req.Timeout * 1000
+		}
+		if err := pools.GetConnectPool().InitializeNode(sub.Id, cfgSub.Protocol, cfgSub.URL, timeoutMS, cfgSub.MaxConnect); err != nil {
+			writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfgSub.URL)})
+			return
+		}
+		args := make(map[string]interface{})
+		if len(req.Arguments) > 0 {
+			if err := json.Unmarshal(req.Arguments, &args); err != nil {
+				writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid_arguments_json"})
+				return
+			}
+		}
+		result, err := pools.GetConnectPool().CallToolByNode(sub.Id, origTool, args)
+		if err != nil {
+			writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{
+				"success":     false,
+				"tool_name":   req.ToolName,
+				"error":       err.Error(),
+				"duration_ms": time.Since(start).Milliseconds(),
+			})
+			return
+		}
+		contentAny := interface{}(nil)
+		if result != nil && len(result.Content) > 0 {
+			if raw, err := json.Marshal(result.Content); err == nil {
+				_ = json.Unmarshal(raw, &contentAny)
+			}
+		}
+		isError := false
+		if result != nil {
+			isError = result.IsError
+		}
+		resp := map[string]interface{}{
+			"success":     true,
+			"tool_name":   req.ToolName,
+			"is_error":    isError,
+			"content":     contentAny,
+			"duration_ms": time.Since(start).Milliseconds(),
+		}
+		writeRuntimeJSON(w, http.StatusOK, resp)
+		return
+	}
+	nodeRec, cfg, err := loadRuntimeNodeConfig(int32(req.NodeID))
 	if err != nil {
 		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
-
 	timeoutMS := cfg.TimeoutMS
 	if req.Timeout > 0 {
 		timeoutMS = req.Timeout * 1000
 	}
-	if err := pools.GetConnectPool().InitializeNode(node.Id, cfg.Protocol, cfg.URL, timeoutMS, cfg.MaxConnect); err != nil {
-		logger.Error("runtime call initialize failed", zap.Int64("node_id", req.NodeID), zap.Error(err))
+	if err := pools.GetConnectPool().InitializeNode(nodeRec.Id, cfg.Protocol, cfg.URL, timeoutMS, cfg.MaxConnect); err != nil {
 		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfg.URL)})
 		return
 	}
@@ -178,7 +312,7 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := pools.GetConnectPool().CallToolByNode(node.Id, strings.TrimSpace(req.ToolName), args)
+	result, err := pools.GetConnectPool().CallToolByNode(nodeRec.Id, strings.TrimSpace(req.ToolName), args)
 	if err != nil {
 		writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{
 			"success":     false,
