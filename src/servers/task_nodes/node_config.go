@@ -7,15 +7,22 @@ import (
 )
 
 // NodeRuntimeConfig 节点运行配置（最小可用字段）。
+// 说明：
+// - URL：上游 MCP 的 httpStreamable 地址（必填）。
+// - Protocol：固定为 http（不支持其它协议）。
+// - Timeout：统一超时（毫秒），用于 connect/listtools/call。
+// - MaxConnect：目标连接数（单实例多连接的并发度）。
 type NodeRuntimeConfig struct {
 	URL        string `json:"url"`
 	Protocol   string `json:"protocol"`
-	TimeoutMS  int    `json:"timeout_ms"`
 	Timeout    int    `json:"timeout"`
 	MaxConnect int    `json:"max_connect"`
 }
 
-// ParseNodeRuntimeConfig 解析 node_config，兼容仅配置 url 的场景。
+// ParseNodeRuntimeConfig 解析 node_config（JSON 字符串），最少只需要 URL。
+// 说明：
+// - 空字符串或缺 URL 均视为非法。
+// - Protocol 强制归一为 http，避免协议分支散落。
 func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -32,17 +39,6 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 		return nil, fmt.Errorf("invalid_node_config: url is required")
 	}
 
-	// 协议规范化：未填写按 http；填写非 http 直接报错，避免隐式降级导致误判。
-	cfg.Protocol = strings.ToLower(strings.TrimSpace(cfg.Protocol))
-	if cfg.Protocol == "" || cfg.Protocol == "http" {
-		cfg.Protocol = "http"
-	} else {
-		return nil, fmt.Errorf("protocol_not_supported: only http is allowed")
-	}
-	// 兼容历史字段 timeout（老数据可能传 timeout，语义与 timeout_ms 一致）。
-	if cfg.TimeoutMS <= 0 && cfg.Timeout > 0 {
-		cfg.TimeoutMS = cfg.Timeout
-	}
-
+	cfg.Protocol = "http"
 	return cfg, nil
 }

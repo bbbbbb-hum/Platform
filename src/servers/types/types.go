@@ -32,17 +32,17 @@ type (
 		Node     Processor //节点实现的接口
 	}
 	NodeInfo struct {
-		ServiceID               string   `json:"service_id"`
-		ChainID                 int32    `json:"chain_id"`
-		NodeID                  int32    `json:"node_id"`                    // 数据库中的节点ID
-		NodeHandle              string   `json:"node_handle"`                // 节点执行函数
-		NodeName                string   `json:"node_name"`                  // 节点名称
-		Description             string   `json:"description"`                // 节点描述
-		Enabled                 bool     `json:"enabled"`                    // 节点是否启用
-		Protocol                string   `json:"protocol"`                   // 节点协议（默认 http）
-		NodeURL                 string   `json:"node_url"`                   // 节点内网地址
-		TimeoutMS               int      `json:"timeout_ms"`                 // 节点调用超时时间
-		ToolNames               []string `json:"tool_names"`                 // 贡献过的工具名称
+		ServiceID   string   `json:"service_id"`
+		ChainID     int32    `json:"chain_id"`
+		NodeID      int32    `json:"node_id"`     // 数据库中的节点ID
+		NodeHandle  string   `json:"node_handle"` // 节点执行函数
+		NodeName    string   `json:"node_name"`   // 节点名称
+		Description string   `json:"description"` // 节点描述
+		Enabled     bool     `json:"enabled"`     // 节点是否启用
+		Protocol    string   `json:"protocol"`    // 节点协议（默认 http）
+		NodeURL     string   `json:"node_url"`    // 节点内网地址
+		Timeout     int      `json:"timeout"`     // 节点统一超时时间（毫秒）
+		ToolNames   []string `json:"tool_names"`  // 贡献过的工具名称
 	}
 )
 

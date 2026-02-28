@@ -13,12 +13,18 @@ import (
 	"go.uber.org/zap"
 )
 
-// ProxyNode HTTP代理节点，用于代理外部 MCP 服务。
+// ProxyNode HTTP代理节点：负责将链路中的节点与外部 MCP 服务对接。
+// 说明：
+// - 工具列表在初始化阶段由连接池缓存，节点只做读取与透传。
+// - 调用路径通过连接池 CallToolByNode 完成，节点不直接持有连接。
 type ProxyNode struct {
 	NodeInfo *types.NodeInfo //节点信息
 }
 
-// Init 初始化代理节点
+// Init 初始化代理节点：
+// - 解析 node_config（URL/timeout/max_connect）
+// - 预热连接池（建连与拉取工具）
+// - 成功后返回 nil，失败返回可诊断错误
 func (p *ProxyNode) Init(config types.InitConfig) error {
 	logger.Info("初始化代理节点", zap.Int32("node_id", config.NodeModel.Id))
 	p.NodeInfo = &types.NodeInfo{
@@ -36,9 +42,9 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 	if nodeErr == nil && nodeCfg != nil {
 		p.NodeInfo.NodeURL = nodeCfg.URL
 		p.NodeInfo.Protocol = nodeCfg.Protocol
-		p.NodeInfo.TimeoutMS = nodeCfg.TimeoutMS
+		p.NodeInfo.Timeout = nodeCfg.Timeout
 		// 预热连接池：节点初始化阶段就尝试建连并拉工具，减少首调用冷启动。
-		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.TimeoutMS, nodeCfg.MaxConnect); err != nil {
+		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.Timeout, nodeCfg.MaxConnect); err != nil {
 			logger.Error("初始化 node_config MCP服务失败", zap.Error(err), zap.Int32("node_id", config.NodeModel.Id))
 		} else {
 			logger.Info("代理节点通过 node_config 初始化完成",
@@ -55,7 +61,9 @@ func (p *ProxyNode) Init(config types.InitConfig) error {
 	return fmt.Errorf("invalid_node_config: node_config.url is required")
 }
 
-// GetTools 获取工具列表 - 从外部MCP服务获取工具
+// GetTools 获取工具列表：
+// - 工具来源于连接池缓存（InitializeNode 时已拉取）
+// - 统一 schema 版本，避免前端渲染差异
 func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 
 	// 工具描述来自连接池缓存（InitializeNode 时已通过 ListTools 读取）。
@@ -81,7 +89,9 @@ func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types
 	return
 }
 
-// Process 处理工具调用 - 调用外部MCP服务
+// Process 处理工具调用：
+// - 透传到连接池 CallToolByNode，统一超时与重试语义
+// - 返回上游 MCP 的工具调用结果
 func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
