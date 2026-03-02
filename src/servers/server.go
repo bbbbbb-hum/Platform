@@ -403,6 +403,7 @@ func ReloadAggregateNodes(serverID string) error {
 }//总结，就算运营改了数据库中的 node_config，加了或者删除了一个节点，也会在调用时重新读取并刷新配置。
 
 // ReloadAggregateNodeByName 根据节点名称热更新聚合节点配置
+// 此函数只负责路由到具体节点，具体的热更新逻辑由节点自己处理
 func ReloadAggregateNodeByName(nodeName string) error {
 	// 1. 遍历所有服务
 	for _, server := range McpServicesMap {
@@ -412,39 +413,17 @@ func ReloadAggregateNodeByName(nodeName string) error {
 			if nodeInstance.NodeInfo.NodeHandle == "aggregate_handle" &&
 				nodeInstance.NodeInfo.NodeName == nodeName {
 				
-				// 4. 从数据库重新读取配置
-				nodeModel := &models.AeMcpTaskNode{}
-				err, nodes := nodeModel.GetChianNodes([]int32{nodeInstance.NodeInfo.NodeID})
-				if err != nil || len(nodes) == 0 {
-					return fmt.Errorf("get_node_config_failed: %w", err)
-				}
-				
-				newConfig := nodes[0].NodeConfig
-				
-				// 5. 检查配置是否变化
-				if aggWithConfig, ok := nodeInstance.Node.(interface{ GetCurrentConfig() string }); ok {
-					oldConfig := aggWithConfig.GetCurrentConfig()
-					if newConfig == oldConfig {
-						logger.Info("配置未变化，跳过刷新",
-							zap.String("node_name", nodeName),
-							zap.String("config", newConfig))
-						return nil
+				// 4. 调用节点的 ReloadFromDatabase 方法
+				// 使用类型断言检查节点是否实现了热更新接口
+				if reloader, ok := nodeInstance.Node.(interface{ ReloadFromDatabase() error }); ok {
+					if err := reloader.ReloadFromDatabase(); err != nil {
+						return fmt.Errorf("reload_failed: %w", err)
 					}
-					logger.Info("检测到配置变化，开始刷新",
-						zap.String("node_name", nodeName),
-						zap.String("old_config", oldConfig),
-						zap.String("new_config", newConfig))
+					logger.Info("聚合节点热更新完成", zap.String("node_name", nodeName))
+					return nil
 				}
 				
-				// 6. 调用 RefreshConfig 刷新配置
-				if agg, ok := nodeInstance.Node.(interface{ RefreshConfig(string) error }); ok {
-					if err := agg.RefreshConfig(newConfig); err != nil {
-						return fmt.Errorf("refresh_config_failed: %w", err)
-					}
-				}
-				
-				logger.Info("聚合节点热更新完成", zap.String("node_name", nodeName))
-				return nil
+				return fmt.Errorf("node_does_not_support_reload: %s", nodeName)
 			}
 		}
 	}

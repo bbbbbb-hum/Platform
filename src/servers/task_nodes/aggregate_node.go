@@ -53,7 +53,7 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 		return fmt.Errorf("parse_aggregate_config_failed: %w", err)
 	}
 	a.subNodeNames = subNodeNames
-	
+
 	// 3. 保存当前配置用于热更新时对比
 	a.currentConfig = config.NodeModel.NodeConfig
 
@@ -147,22 +147,22 @@ func (a *AggregateNode) buildToolInfos() {
 
 // GetTools 获取聚合后的工具列表
 func (a *AggregateNode) GetTools(rc *types.RunningContext) []*types.ToolDesc {
-    a.mutex.RLock()  // 读锁，多人可以同时读
-    defer a.mutex.RUnlock()
+	a.mutex.RLock() // 读锁，多人可以同时读
+	defer a.mutex.RUnlock()
 
-    var toolList []*types.ToolDesc
-    
-    // 遍历 map_ToolInfos，返回所有工具
-    for aggregatedName, aggTool := range a.mapToolInfos {
-        toolList = append(toolList, &types.ToolDesc{
-            ToolName:        aggregatedName,  // "天气节点_get_weather"
-            ToolDesc:        aggTool.ToolDesc.ToolDesc,
-            ToolInputSchema: aggTool.ToolDesc.ToolInputSchema,
-        })
-    }
+	var toolList []*types.ToolDesc
 
-    logger.Info("聚合节点获取工具列表", zap.Int("工具数量", len(toolList)))
-    return toolList
+	// 遍历 map_ToolInfos，返回所有工具
+	for aggregatedName, aggTool := range a.mapToolInfos {
+		toolList = append(toolList, &types.ToolDesc{
+			ToolName:        aggregatedName, // "天气节点_get_weather"
+			ToolDesc:        aggTool.ToolDesc.ToolDesc,
+			ToolInputSchema: aggTool.ToolDesc.ToolInputSchema,
+		})
+	}
+
+	logger.Info("聚合节点获取工具列表", zap.Int("工具数量", len(toolList)))
+	return toolList
 }
 
 // Process 处理工具调用，路由到对应子节点
@@ -177,7 +177,7 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 	}
 
 	// 2. 调用子节点处理
-    // 关键：传入 OriginalName (原工具名)，不是带前缀的！
+	// 关键：传入 OriginalName (原工具名)，不是带前缀的！
 	return aggTool.Node.Process(rc, aggTool.OriginalName, userParamMap, lastStepResp)
 }
 
@@ -193,21 +193,60 @@ func (a *AggregateNode) GetCurrentConfig() string {
 	return a.currentConfig
 }
 
+// ReloadFromDatabase 从数据库重新加载配置并热更新
+// 这是对外暴露的热更新入口，封装了数据库读取和配置对比逻辑
+func (a *AggregateNode) ReloadFromDatabase() error {
+	nodeID := a.NodeInfo.NodeID
+	logger.Info("从数据库重新加载聚合节点配置", zap.Int32("node_id", nodeID))
+
+	// 1. 从数据库读取最新配置
+	nodeModel := &models.AeMcpTaskNode{}
+	err, nodes := nodeModel.GetChianNodes([]int32{nodeID})
+	if err != nil || len(nodes) == 0 {
+		return fmt.Errorf("get_node_config_from_db_failed: %w", err)
+	}
+
+	newConfig := nodes[0].NodeConfig
+
+	// 2. 检查配置是否变化
+	a.mutex.RLock()
+	oldConfig := a.currentConfig
+	a.mutex.RUnlock()
+
+	if newConfig == oldConfig {
+		logger.Info("配置未变化，跳过刷新",
+			zap.Int32("node_id", nodeID),
+			zap.String("config", newConfig))
+		return nil
+	}
+
+	logger.Info("检测到配置变化，开始刷新",
+		zap.Int32("node_id", nodeID),
+		zap.String("old_config", oldConfig),
+		zap.String("new_config", newConfig))
+
+	// 3. 刷新配置
+	return a.RefreshConfig(newConfig)
+}
+
 // RefreshConfig 热更新配置
+// 注意：此方法会获取写锁，因为需要修改节点的内部状态
 func (a *AggregateNode) RefreshConfig(newConfig string) error {
 	logger.Info("开始热更新聚合节点配置", zap.Int32("node_id", a.NodeInfo.NodeID))
 
-	// 解析新配置
+	// 解析新配置（在加锁前先验证，减少锁持有时间）
 	newSubNodeNames, err := ParseAggregateConfig(newConfig)
 	if err != nil {
 		return fmt.Errorf("parse_new_config_failed: %w", err)
 	}
 
-	// 更新配置
+	// 先更新配置字段（这些字段在 initSubNodes 外部，需要单独保护）
+	a.mutex.Lock()
 	a.subNodeNames = newSubNodeNames
 	a.initConfig.NodeModel.NodeConfig = newConfig
-	a.currentConfig = newConfig // 更新当前配置
+	a.currentConfig = newConfig
+	a.mutex.Unlock()
 
-	// 重新初始化子节点
+	// 重新初始化子节点（initSubNodes 内部会再次获取写锁）
 	return a.initSubNodes(a.initConfig)
 }
