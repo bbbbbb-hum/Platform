@@ -5,6 +5,7 @@ import (
 	"AgentEarth_AgentPlatform/src/servers/pools"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -12,76 +13,92 @@ import (
 	"go.uber.org/zap"
 )
 
-// ProxyNode SSE代理节点，用于代理SSE类型的MCP服务
+// ProxyNode HTTP代理节点：负责将链路中的节点与外部 MCP 服务对接。
+// 说明：
+// - 工具列表在初始化阶段由连接池缓存，节点只做读取与透传。
+// - 调用路径通过连接池 CallToolByNode 完成，节点不直接持有连接。
 type ProxyNode struct {
 	NodeInfo *types.NodeInfo //节点信息
 }
 
-// Init 初始化SSE代理节点
+// Init 初始化代理节点：
+// - 解析 node_config（URL/timeout/max_connect）
+// - 预热连接池（建连与拉取工具）
+// - 成功后返回 nil，失败返回可诊断错误
 func (p *ProxyNode) Init(config types.InitConfig) error {
-	logger.Info("初始化代理节点", zap.String("node_id", string(config.NodeModel.Id)))
+	logger.Info("初始化代理节点", zap.Int32("node_id", config.NodeModel.Id))
 	p.NodeInfo = &types.NodeInfo{
-		ServiceID:               config.ServiceID,
-		ChainID:                 config.ChainModel.Id,
-		NodeID:                  config.NodeModel.Id,
-		NodeHandle:              config.NodeModel.NodeHandle,
-		NodeName:                config.NodeModel.NodeName,
-		Description:             config.NodeModel.Description,
-		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
+		ServiceID:   config.ServiceID,
+		ChainID:     config.ChainModel.Id,
+		NodeID:      config.NodeModel.Id,
+		NodeHandle:  config.NodeModel.NodeHandle,
+		NodeName:    config.NodeModel.NodeName,
+		Description: config.NodeModel.Description,
+		Enabled:     true,
 	}
 
-	// 初始化外部MCP服务
-	if config.NodeModel.ExternalServiceId != "" {
-		err := pools.GetConnectPool().InitializeService(config.NodeModel.ExternalServiceId)
-		if err != nil {
-			logger.Error("初始化外部 MCP服务失败", zap.Error(err))
-			return err
+	// 仅支持 node_config 链路：从 node_config 初始化。
+	nodeCfg, nodeErr := ParseNodeRuntimeConfig(config.NodeModel.NodeConfig)
+	if nodeErr == nil && nodeCfg != nil {
+		p.NodeInfo.NodeURL = nodeCfg.URL
+		p.NodeInfo.Protocol = nodeCfg.Protocol
+		p.NodeInfo.Timeout = nodeCfg.Timeout
+		// 预热连接池：节点初始化阶段就尝试建连并拉工具，减少首调用冷启动。
+		if err := pools.GetConnectPool().InitializeNode(config.NodeModel.Id, nodeCfg.Protocol, nodeCfg.URL, nodeCfg.Timeout, nodeCfg.MaxConnect); err != nil {
+			logger.Error("初始化 node_config MCP服务失败", zap.Error(err), zap.Int32("node_id", config.NodeModel.Id))
+		} else {
+			logger.Info("代理节点通过 node_config 初始化完成",
+				zap.Int32("node_id", config.NodeModel.Id),
+				zap.String("protocol", nodeCfg.Protocol))
+			return nil
 		}
 	}
 
-	logger.Info("代理节点初始化完成")
-	return nil
+	// node_config 不可用时返回清晰错误。
+	if nodeErr != nil {
+		return fmt.Errorf("invalid_node_config: %w", nodeErr)
+	}
+	return fmt.Errorf("invalid_node_config: node_config.url is required")
 }
 
-// GetTools 获取工具列表 - 从外部MCP服务获取工具
+// GetTools 获取工具列表：
+// - 工具来源于连接池缓存（InitializeNode 时已拉取）
+// - 统一 schema 版本，避免前端渲染差异
 func (p *ProxyNode) GetTools(rc *types.RunningContext) (currentToolList []*types.ToolDesc) {
 
-	// 从连接池获取外部服务的工具
-	if p.NodeInfo.ExternalServiceConfigID != "" {
-		externalTools := pools.GetConnectPool().GetServiceTools(p.NodeInfo.ExternalServiceConfigID)
-		logger.Debug("工具列表", zap.Int("工具数量", len(externalTools)))
-		for _, tool := range externalTools {
-			CleanDefaultNull(tool.InputSchema)
-			b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
-			logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
-			// 将该节点上贡献的工具名称保存到节点信息中
-			p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
-			// 修改工具输入参数的schema的版本
-			if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
-				tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
-			}
-			currentToolList = append(currentToolList, &types.ToolDesc{
-				ToolDesc:        tool.Description,
-				ToolInputSchema: tool.InputSchema,
-				ToolName:        tool.Name,
-			})
+	// 工具描述来自连接池缓存（InitializeNode 时已通过 ListTools 读取）。
+	externalTools := pools.GetConnectPool().GetNodeTools(p.NodeInfo.NodeID)
+	logger.Debug("工具列表(node)", zap.Int("工具数量", len(externalTools)))
+	for _, tool := range externalTools {
+		CleanDefaultNull(tool.InputSchema)
+		b, _ := json.MarshalIndent(tool.InputSchema, "", "  ")
+		logger.Debug("工具信息", zap.String("工具名称", tool.Name), zap.String("Input Schema 参数", string(b)))
+		p.NodeInfo.ToolNames = append(p.NodeInfo.ToolNames, tool.Name)
+		// 统一 schema 版本，避免不同上游服务返回版本不一致导致前端渲染差异。
+		if tool.InputSchema != nil && tool.InputSchema.Schema != "https://json-schema.org/draft/2020-12/schema" {
+			tool.InputSchema.Schema = "https://json-schema.org/draft/2020-12/schema"
 		}
+		currentToolList = append(currentToolList, &types.ToolDesc{
+			ToolDesc:        tool.Description,
+			ToolInputSchema: tool.InputSchema,
+			ToolName:        tool.Name,
+		})
 	}
 
 	logger.Info("代理节点获取工具列表", zap.Int("工具数量", len(currentToolList)))
 	return
 }
 
-// Process 处理工具调用 - 调用外部MCP服务
+// Process 处理工具调用：
+// - 透传到连接池 CallToolByNode，统一超时与重试语义
+// - 返回上游 MCP 的工具调用结果
 func (p *ProxyNode) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}, lastStepResp *mcp.CallToolResult) (currentResp *mcp.CallToolResult, err error) {
 	// 获取上一步的结果
 	if lastStepResp != nil {
 		currentResp = lastStepResp
 	}
 
-	// 调用必应的MCP服务的工具
-	currentResp, err = pools.GetConnectPool().CallTool(p.NodeInfo.ExternalServiceConfigID, userCmd, userParamMap)
+	currentResp, err = pools.GetConnectPool().CallToolByNode(p.NodeInfo.NodeID, userCmd, userParamMap)
 	if err != nil {
 		return
 	}

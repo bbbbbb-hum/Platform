@@ -1,13 +1,12 @@
 # AgentEarth Agent Platform
 
-AgentEarth Agent Platform 是一个基于 MCP (Model Context Protocol) 的智能代理管理平台，支持多种外部服务集成方式。
+AgentEarth Agent Platform 是一个基于 MCP (Model Context Protocol) 的智能代理管理平台，支持基于 HTTP Streamable 的外部服务集成。
 
 ## 🚀 特性
 
-- **多种连接方式**：支持 SSE、stdio、httpStreamable
+- **连接方式**：支持 httpStreamable
 - **连接池管理**：自动维护和恢复连接
 - **多账号支持**：支持多账号并发和轮询
-- **Docker Stdio 集成**：通过 Docker 容器启动外部服务
 - **健康检查**：自动检测和恢复异常连接
 - **资源限制**：支持实例数量和连接数限制
 
@@ -22,7 +21,6 @@ AgentEarth Agent Platform 是一个基于 MCP (Model Context Protocol) 的智能
 │   └── ...
 ├── k8s/                   # Kubernetes 配置
 ├── docs/                  # 文档
-│   └── README.md                    # AIM-MCP Docker Stdio 集成指南
 ├── scripts/               # 脚本（可选）
 ├── Dockerfile            # Docker 镜像构建
 ├── Makefile             # 构建工具
@@ -80,105 +78,15 @@ kubectl get pods -l app=ae-platform
 kubectl logs -f deployment/ae-platform
 ```
 
-## 🎯 aim-mcp Docker Stdio 集成
-
-本项目支持通过 Docker 容器启动外部 MCP 服务（如 aim-mcp），并使用 stdio 方式进行交互。
-
-### 快速集成
-
-```bash
-# 1. 导入 aim-mcp 镜像
-k3d image import aim-mcp:latest -c ae-platform
-
-# 2. 配置数据库（参考 docs/README.md）
-
-# 3. 验证
-kubectl exec -it deployment/ae-platform -- docker ps
-```
-
-### 详细文档
-
-- 📚 [AIM-MCP Docker Stdio 集成指南](docs/README.md) - 完整配置文档
-- 📋 [解决方案总结](SOLUTION_SUMMARY.md) - 架构和原理
-
 ## 📖 MCP 服务配置
 
 ### 支持的服务类型
 
 | 类型 | 说明 | 使用场景 |
 |------|------|----------|
-| `sse` | Server-Sent Events | 远程 MCP 服务（HTTP 流） |
-| `stdio` | 标准输入输出 | 本地进程或 Docker 容器 |
 | `httpStreamable` | HTTP 流式传输 | 远程 HTTP MCP 服务 |
 
 ### 配置示例
-
-#### stdio 类型（Docker 容器）
-
-```sql
-INSERT INTO ae_mcp_external_services (
-    external_service_id,
-    service_name,
-    type,
-    max_instance,
-    launch_info
-) VALUES (
-    'my-mcp-service',
-    'My MCP Service',
-    'stdio',
-    1,
-    '{
-        "command": "docker",
-        "args": ["run", "--rm", "-i", "my-mcp:latest"],
-        "launch_timeout": 30000
-    }'
-);
-```
-
-#### stdio 类型（本地进程）
-
-```sql
-INSERT INTO ae_mcp_external_services (
-    external_service_id,
-    service_name,
-    type,
-    max_instance,
-    launch_info
-) VALUES (
-    'local-service',
-    'Local Service',
-    'stdio',
-    1,
-    '{
-        "command": "/path/to/binary",
-        "args": ["--arg1", "value1"],
-        "launch_timeout": 30000
-    }'
-);
-```
-
-#### SSE 类型
-
-```sql
-INSERT INTO ae_mcp_external_services (
-    external_service_id,
-    service_name,
-    type,
-    max_instance,
-    connect_info
-) VALUES (
-    'remote-sse-service',
-    'Remote SSE Service',
-    'sse',
-    3,
-    '{
-        "url": "https://api.example.com/sse",
-        "headers": {"Authorization": "Bearer token"},
-        "connect_timeout": 10000,
-        "max_connect": 5
-    }'
-);
-```
 
 ## 🔧 配置说明
 
@@ -248,7 +156,6 @@ kubectl exec -it deployment/ae-platform -- docker ps
 
 详见：
 - [K3d 部署常见问题](k8s/README.md#常见问题)
-- [aim-mcp 故障排查](docs/README.md#验证和调试)
 
 ## 🔒 安全注意事项
 

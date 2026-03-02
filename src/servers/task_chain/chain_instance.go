@@ -14,6 +14,7 @@ import (
 
 type (
 	// ChainInstance 任务链实例
+	// 说明：一个服务对应一条任务链，链内包含若干节点实例，按顺序执行。
 	ChainInstance struct {
 		ServerID      string
 		ChainID       int32
@@ -21,6 +22,10 @@ type (
 	}
 )
 
+// Init 初始化任务链实例：
+// - 加载链上节点配置
+// - 创建节点实例并调用其 Init
+// - 将节点按链路顺序挂到 NodeInstances
 func (i *ChainInstance) Init(config types.InitConfig) error {
 	logger.Info("初始化任务链", zap.Int("chain_id", int(config.ChainModel.Id)))
 	i.ServerID = config.ServiceID
@@ -63,6 +68,9 @@ func (i *ChainInstance) Init(config types.InitConfig) error {
 	return nil
 }
 
+// Process 按链路顺序依次执行节点：
+// - 上一节点输出作为下一节点输入
+// - 任一节点失败则终止链路
 func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userParamMap map[string]interface{}) (currentResp *mcp.CallToolResult, err error) {
 	// TODO: 节点处理逻辑
 	var lastResp *mcp.CallToolResult
@@ -91,6 +99,7 @@ func (i *ChainInstance) Process(rc *types.RunningContext, userCmd string, userPa
 	return
 }
 
+// GetTools 汇总链上所有节点提供的工具清单。
 func (i *ChainInstance) GetTools(rc *types.RunningContext) []*types.ToolDesc {
 	var lastStepToolList []*types.ToolDesc
 	for _, nodeInstance := range i.NodeInstances {

@@ -83,6 +83,8 @@ func main() {
 
 	// 初始化 Logger
 	boot.SetupLogger()
+	// 下面依次初始化依赖组件。当前策略偏“尽量启动”：
+	// 某些依赖失败仅记录日志，不立刻退出进程。
 	// 初始化 DB
 	err := boot.SetupDB()
 	if err != nil {
@@ -126,6 +128,8 @@ func main() {
 
 	// 初始化 mcp 服务
 	httpStreamableHandler := mcp.NewStreamableHTTPHandler(func(request *http.Request) *mcp.Server {
+		// mcp.NewStreamableHTTPHandler 会根据请求路径选择具体 server 实例。
+		// 这里约定路径为 /mcp-server/{server_id}。
 		path := request.URL.Path
 		pathParts := strings.Split(strings.Trim(path, "/"), "/")
 
@@ -137,6 +141,7 @@ func main() {
 
 		mcpServer, ok := servers.McpServicesMap[serverID]
 		if !ok || mcpServer == nil || mcpServer.GetServer() == nil {
+			// 返回 nil 表示该 server_id 未初始化或不存在，交由上层返回对应状态。
 			return nil
 		}
 		return mcpServer.GetServer()
@@ -215,6 +220,10 @@ func main() {
 	// 创建关闭超时上下文
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer shutdownCancel()
+	// 关停顺序原则：
+	// 1) 先停对外处理能力和连接池
+	// 2) 再停消息消费和中间件连接
+	// 3) 最后关 HTTP server
 
 	// 关闭所有 MCP 连接池（会清理所有 npx/uvx 子进程）
 	logger.Info("正在关闭连接池，清理子进程...")

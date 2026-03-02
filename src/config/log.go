@@ -5,7 +5,7 @@ import "AgentEarth_AgentPlatform/src/helpers/config"
 func init() {
 	config.Add("log", func() map[string]interface{} {
 		return map[string]interface{}{
-			"level":      config.Env("LOG_LEVEL", "debug"),
+			"level":      config.Env("LOG_LEVEL", "info"),
 			"type":       config.Env("LOG_TYPE", "single"),                // 日志类型，single 单个文件，daily 按日期分割
 			"filename":   config.Env("LOG_NAME", "storage/logs/logs.log"), // 日志文件路径
 			"max_size":   config.Env("LOG_MAX_SIZE", 64),                  // 每个日志文件保存的最大尺寸 单位：M

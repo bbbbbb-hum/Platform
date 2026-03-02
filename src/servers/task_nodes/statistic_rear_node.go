@@ -20,7 +20,7 @@ type StatisticRearNode struct {
 
 // Init 初始化空节点
 func (s *StatisticRearNode) Init(config types.InitConfig) error {
-	logger.Info("初始化统计节点", zap.String("node_id", string(config.NodeModel.Id)))
+	logger.Info("初始化统计节点", zap.Int32("node_id", config.NodeModel.Id))
 	s.NodeInfo = &types.NodeInfo{
 		ServiceID:               config.ServiceID,
 		ChainID:                 config.ChainModel.Id,
@@ -29,7 +29,6 @@ func (s *StatisticRearNode) Init(config types.InitConfig) error {
 		NodeName:                config.NodeModel.NodeName,
 		Description:             config.NodeModel.Description,
 		Enabled:                 true,
-		ExternalServiceConfigID: config.NodeModel.ExternalServiceId,
 	}
 	logger.Info("后置统计节点初始化完成，不提供任何工具")
 	return nil
