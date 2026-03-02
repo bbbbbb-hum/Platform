@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -38,7 +37,6 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 				zap.String("ServiceName", service.ServiceName),
 				zap.Int32("node_id", service.NodeID),
 				zap.String("node_service_key", buildNodeServiceKey(service.NodeID)),
-				zap.Int("connection_index", i),
 				zap.Error(err1))
 			continue
 		}
@@ -58,8 +56,7 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	logger.Info("创建HTTP连接...",
 		zap.String("url", connectInfo.Url),
 		zap.Int32("node_id", nodeID),
-		zap.String("node_service_key", nodeServiceKey),
-		zap.Int("connection_index", connectionIndex))
+		zap.String("node_service_key", nodeServiceKey))
 
 	// 确保 headers 可写，避免 nil map 写入 panic。
 	if connectInfo.Headers == nil {
@@ -117,7 +114,6 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	logger.Info("客户端连接头:",
 		zap.Int32("node_id", nodeID),
 		zap.String("node_service_key", nodeServiceKey),
-		zap.Int("connection_index", connectionIndex),
 		zap.Any("headers", connectInfo.Headers))
 	// 创建 MCP Client。该客户端与具体上游 endpoint 建立 streamable 会话。
 	client := mcp.NewClient(&mcp.Implementation{
@@ -151,17 +147,14 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 		}
 		return
 	}
-	connectionID := atomic.AddUint64(&globalConnectionID, 1)
 	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d", nodeID, connectionID),
-		Session:      session,
-		Transport:    transport, // 保存 Transport 引用，用于关闭时释放空闲连接
-		LastPing:     time.Now(),
-		ActiveUsers:  0,
+		Session:     session,
+		Transport:   transport, // 保存 Transport 引用，用于关闭时释放空闲连接
+		LastPing:    time.Now(),
+		ActiveUsers: 0,
 	}
 	// 连接对象由上层挂到 service.Instance 上，并纳入维护协程管理。
 	logger.Info("创建HTTP连接成功",
-		zap.String("connection_id", connection.ConnectionID),
 		zap.Int32("node_id", nodeID),
 		zap.String("node_service_key", nodeServiceKey))
 	return

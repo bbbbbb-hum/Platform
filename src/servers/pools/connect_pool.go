@@ -57,11 +57,10 @@ type (
 	}
 	// ExternalConnection 单个连接信息
 	ExternalConnection struct {
-		ConnectionID string
-		Session      *mcp.ClientSession
-		Transport    *http.Transport // HTTP Transport 引用，用于关闭时释放空闲连接
-		LastPing     time.Time
-		ActiveUsers  int // 当前活跃用户数（可选，用于后期优化）
+		Session     *mcp.ClientSession
+		Transport   *http.Transport // HTTP Transport 引用，用于关闭时释放空闲连接
+		LastPing    time.Time
+		ActiveUsers int // 当前活跃用户数（可选，用于后期优化）
 	}
 	// headerTransport 自定义传输层，用于添加请求头
 	headerTransport struct {
@@ -90,7 +89,6 @@ func (ht *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 var (
 	GlobalConnectionPool *ConnectionPool
 	oncePool             sync.Once
-	globalConnectionID   uint64
 )
 
 // GetConnectPool 获取连接池
