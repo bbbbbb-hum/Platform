@@ -20,6 +20,7 @@ type AggregateNode struct {
 	mapNodeHandles map[string]types.Processor // 节点名 -> 节点实例
 	subNodeNames   []string                   // 配置的子节点名称列表
 	initConfig     types.InitConfig           // 保存初始化配置用于热更新
+	currentConfig  string                     // 当前配置的原始字符串，用于热更新时对比
 }
 
 // AggregatedTool 聚合后的工具信息
@@ -35,6 +36,7 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 	logger.Info("初始化聚合节点", zap.Int32("node_id", config.NodeModel.Id))
 
 	a.initConfig = config
+	// 1. 保存节点基本信息
 	a.NodeInfo = &types.NodeInfo{
 		ServiceID:   config.ServiceID,
 		ChainID:     config.ChainModel.Id,
@@ -45,12 +47,15 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 		Enabled:     true,
 	}
 
-	// 解析 node_config 获取子节点名称列表
-	subNodeNames, err := ParseAggregateConfig(config.NodeModel.NodeConfig)
+	// 2. 解析 node_config，得到子节点名称列表 ["天气节点", "搜索节点"]
+	subNodeNames, err := ParseAggregateConfig(config.NodeModel.NodeConfig) //ParseAggregateConfig是解析聚合节点配置，返回子节点名称列表(去空格)
 	if err != nil {
 		return fmt.Errorf("parse_aggregate_config_failed: %w", err)
 	}
 	a.subNodeNames = subNodeNames
+	
+	// 3. 保存当前配置用于热更新时对比
+	a.currentConfig = config.NodeModel.NodeConfig
 
 	// 初始化子节点
 	return a.initSubNodes(config)
@@ -61,8 +66,9 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	a.mapNodeHandles = make(map[string]types.Processor)
-	a.mapToolInfos = make(map[string]*AggregatedTool)
+	// 1. 初始化两个map
+	a.mapNodeHandles = make(map[string]types.Processor) // 存节点实例
+	a.mapToolInfos = make(map[string]*AggregatedTool)   // 存工具信息
 
 	nodeModel := &models.AeMcpTaskNode{}
 	for _, nodeName := range a.subNodeNames {
@@ -98,7 +104,7 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 		}
 
 		// 存储子节点实例
-		cleanName := strings.ReplaceAll(nodeName, " ", "")
+		cleanName := strings.ReplaceAll(nodeName, " ", "_")
 		a.mapNodeHandles[cleanName] = processor
 		logger.Info("成功初始化子节点", zap.String("node_name", nodeName))
 	}
@@ -109,20 +115,31 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 	return nil
 }
 
+//map_NodeHandles的意义是让节点名称对应到具体的节点实例
+//map_ToolInfos的意义是让聚合后的工具名对应具体的工具信息，有多少工具可用，每个工具的详细信息
+
 // buildToolInfos 构建聚合后的工具映射表
 func (a *AggregateNode) buildToolInfos() {
 	a.mapToolInfos = make(map[string]*AggregatedTool)
 
+	// 遍历每个子节点
 	for nodeName, processor := range a.mapNodeHandles {
+		// 获取这个子节点的所有工具
 		tools := processor.GetTools(&types.RunningContext{})
+
+		// 遍历每个工具
 		for _, tool := range tools {
-			// 聚合后工具名 = 节点名(去空格) + "_" + 原工具名
+			// 关键：加前缀防重名！
+			// 原工具名: get_weather
+			// 加前缀后: 天气节点_get_weather
 			aggregatedName := nodeName + "_" + tool.ToolName
+
+			// 存到 map_ToolInfos
 			a.mapToolInfos[aggregatedName] = &AggregatedTool{
-				OriginalName: tool.ToolName,
-				NodeName:     nodeName,
-				ToolDesc:     tool,
-				Node:         processor,
+				OriginalName: tool.ToolName, // 原名
+				NodeName:     nodeName,      // 属于哪个节点
+				ToolDesc:     tool,          // 工具详情
+				Node:         processor,     // 节点实例（能干活的人）
 			}
 		}
 	}
@@ -130,20 +147,22 @@ func (a *AggregateNode) buildToolInfos() {
 
 // GetTools 获取聚合后的工具列表
 func (a *AggregateNode) GetTools(rc *types.RunningContext) []*types.ToolDesc {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+    a.mutex.RLock()  // 读锁，多人可以同时读
+    defer a.mutex.RUnlock()
 
-	var toolList []*types.ToolDesc
-	for aggregatedName, aggTool := range a.mapToolInfos {
-		toolList = append(toolList, &types.ToolDesc{
-			ToolName:        aggregatedName,
-			ToolDesc:        aggTool.ToolDesc.ToolDesc,
-			ToolInputSchema: aggTool.ToolDesc.ToolInputSchema,
-		})
-	}
+    var toolList []*types.ToolDesc
+    
+    // 遍历 map_ToolInfos，返回所有工具
+    for aggregatedName, aggTool := range a.mapToolInfos {
+        toolList = append(toolList, &types.ToolDesc{
+            ToolName:        aggregatedName,  // "天气节点_get_weather"
+            ToolDesc:        aggTool.ToolDesc.ToolDesc,
+            ToolInputSchema: aggTool.ToolDesc.ToolInputSchema,
+        })
+    }
 
-	logger.Info("聚合节点获取工具列表", zap.Int("工具数量", len(toolList)))
-	return toolList
+    logger.Info("聚合节点获取工具列表", zap.Int("工具数量", len(toolList)))
+    return toolList
 }
 
 // Process 处理工具调用，路由到对应子节点
@@ -157,13 +176,21 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 		return nil, fmt.Errorf("tool_not_found: %s", userCmd)
 	}
 
-	// 调用子节点处理，使用原始工具名
+	// 2. 调用子节点处理
+    // 关键：传入 OriginalName (原工具名)，不是带前缀的！
 	return aggTool.Node.Process(rc, aggTool.OriginalName, userParamMap, lastStepResp)
 }
 
 // GetNodeInfo 获取节点信息
 func (a *AggregateNode) GetNodeInfo() *types.NodeInfo {
 	return a.NodeInfo
+}
+
+// GetCurrentConfig 获取当前配置
+func (a *AggregateNode) GetCurrentConfig() string {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	return a.currentConfig
 }
 
 // RefreshConfig 热更新配置
@@ -179,6 +206,7 @@ func (a *AggregateNode) RefreshConfig(newConfig string) error {
 	// 更新配置
 	a.subNodeNames = newSubNodeNames
 	a.initConfig.NodeModel.NodeConfig = newConfig
+	a.currentConfig = newConfig // 更新当前配置
 
 	// 重新初始化子节点
 	return a.initSubNodes(a.initConfig)

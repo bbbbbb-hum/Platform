@@ -323,31 +323,116 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 	return result, result.StructuredContent, nil
 }
 
+// server.go 第 327-352 行
 // ReloadAggregateNodes 热更新指定服务的聚合节点配置
+
+// ===== 第1步：根据 serverID 找到服务实例 =====
 func ReloadAggregateNodes(serverID string) error {
+	// McpServicesMap 是一个 map，key 是 serverID，value 是服务实例
+	// 这里通过 serverID 从 map 中找到对应的服务
 	server, ok := McpServicesMap[serverID]
+	
+	// 如果找不到服务，或者服务是 nil，说明 serverID 无效
 	if !ok || server == nil {
+		// 返回错误，提示找不到服务
 		return fmt.Errorf("server_not_found: %s", serverID)
 	}
 
-	// 遍历链上的节点，找到聚合节点并刷新
+	// ===== 第2步：遍历链上的所有节点 =====
+	// server.ChainInstance.NodeInstances 是这个服务链上所有节点的列表
+	// 遍历每个节点，找到聚合节点
 	for _, nodeInstance := range server.ChainInstance.NodeInstances {
+		
+		// ===== 第3步：判断是不是聚合节点 =====
+		// nodeInstance.NodeInfo.NodeHandle 存储了节点的类型
+		// 如果是 "aggregate_handle"，说明是聚合节点
 		if nodeInstance.NodeInfo.NodeHandle == "aggregate_handle" {
-			// 从数据库重新读取配置
+			
+			// ===== 第4步：从数据库重新读取配置 =====
+			// 因为运营可能修改了数据库中的 node_config，需要重新读取
 			nodeModel := &models.AeMcpTaskNode{}
+			
+			// 通过节点ID查询数据库，获取最新的节点信息
+			// nodeInstance.NodeInfo.NodeID 是这个聚合节点在数据库中的 ID
 			err, nodes := nodeModel.GetChianNodes([]int32{nodeInstance.NodeInfo.NodeID})
+			
+			// 如果查询失败，或者没找到节点，返回错误
 			if err != nil || len(nodes) == 0 {
 				return fmt.Errorf("get_node_config_failed: %w", err)
 			}
-			// 调用 RefreshConfig
+			
+			// ===== 第5步：调用 RefreshConfig 刷新配置 =====
+			// nodes[0] 是查询到的节点对象
+			// nodes[0].NodeConfig 是最新的配置内容，比如 '["天气节点", "搜索节点"]'
+			
+			// 这里使用类型断言，判断 nodeInstance.Node 是否实现了 RefreshConfig 方法
+			// 如果实现了，说明它是聚合节点，可以刷新配置
 			if agg, ok := nodeInstance.Node.(interface{ RefreshConfig(string) error }); ok {
+				
+				// 调用聚合节点的 RefreshConfig 方法，传入新配置
+				// 这会重新解析配置、重新初始化子节点、更新工具列表
 				if err := agg.RefreshConfig(nodes[0].NodeConfig); err != nil {
+					// 如果刷新失败，返回错误
 					return fmt.Errorf("refresh_config_failed: %w", err)
 				}
 			}
 		}
 	}
 
+	// ===== 第6步：记录日志 =====
+	// 热更新完成后，记录日志
 	logger.Info("聚合节点热更新完成", zap.String("server_id", serverID))
+	
+	// 返回 nil，表示成功
 	return nil
+}//总结，就算运营改了数据库中的 node_config，加了或者删除了一个节点，也会在调用时重新读取并刷新配置。
+
+// ReloadAggregateNodeByName 根据节点名称热更新聚合节点配置
+func ReloadAggregateNodeByName(nodeName string) error {
+	// 1. 遍历所有服务
+	for _, server := range McpServicesMap {
+		// 2. 遍历链上的节点
+		for _, nodeInstance := range server.ChainInstance.NodeInstances {
+			// 3. 找到聚合节点，且节点名称匹配
+			if nodeInstance.NodeInfo.NodeHandle == "aggregate_handle" &&
+				nodeInstance.NodeInfo.NodeName == nodeName {
+				
+				// 4. 从数据库重新读取配置
+				nodeModel := &models.AeMcpTaskNode{}
+				err, nodes := nodeModel.GetChianNodes([]int32{nodeInstance.NodeInfo.NodeID})
+				if err != nil || len(nodes) == 0 {
+					return fmt.Errorf("get_node_config_failed: %w", err)
+				}
+				
+				newConfig := nodes[0].NodeConfig
+				
+				// 5. 检查配置是否变化
+				if aggWithConfig, ok := nodeInstance.Node.(interface{ GetCurrentConfig() string }); ok {
+					oldConfig := aggWithConfig.GetCurrentConfig()
+					if newConfig == oldConfig {
+						logger.Info("配置未变化，跳过刷新",
+							zap.String("node_name", nodeName),
+							zap.String("config", newConfig))
+						return nil
+					}
+					logger.Info("检测到配置变化，开始刷新",
+						zap.String("node_name", nodeName),
+						zap.String("old_config", oldConfig),
+						zap.String("new_config", newConfig))
+				}
+				
+				// 6. 调用 RefreshConfig 刷新配置
+				if agg, ok := nodeInstance.Node.(interface{ RefreshConfig(string) error }); ok {
+					if err := agg.RefreshConfig(newConfig); err != nil {
+						return fmt.Errorf("refresh_config_failed: %w", err)
+					}
+				}
+				
+				logger.Info("聚合节点热更新完成", zap.String("node_name", nodeName))
+				return nil
+			}
+		}
+	}
+	
+	return fmt.Errorf("node_not_found: %s", nodeName)
 }

@@ -77,12 +77,15 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
+	//根据 nodeID 查数据库
 	var node models.AeMcpTaskNode
 	if err := models.GetDB().Where("id = ?", int32(req.NodeID)).First(&node).Error; err != nil {
 		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
+	// 判断是否是聚合节点
 	if strings.TrimSpace(node.NodeHandle) == "aggregate_handle" {
+		// 1. 解析配置，得到子节点名称列表 ["天气节点", "搜索节点"]
 		names, err := task_nodes.ParseAggregateConfig(node.NodeConfig)
 		if err != nil {
 			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
@@ -97,7 +100,9 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 			id   int32
 		}
 		subNodes := make([]subInfo, 0, len(names))
+		// 2. 遍历每个子节点
 		for _, n := range names {
+			// 查数据库获取子节点信息
 			sub, e := (&models.AeMcpTaskNode{}).GetByNodeName(n)
 			if e != nil || sub == nil || !sub.Enabled {
 				continue
@@ -113,15 +118,17 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 			if err := pools.GetConnectPool().InitializeNode(sub.Id, cfg.Protocol, cfg.URL, tms, cfg.MaxConnect); err != nil {
 				continue
 			}
-			subNodes = append(subNodes, subInfo{name: strings.ReplaceAll(n, " ", ""), id: sub.Id})
+			subNodes = append(subNodes, subInfo{name: strings.ReplaceAll(n, " ", "_"), id: sub.Id})
 		}
 		toolList := make([]map[string]interface{}, 0, 16)
+		// 5. 获取每个子节点的工具
 		for _, si := range subNodes {
 			tools := pools.GetConnectPool().GetNodeTools(si.id)
 			for _, tool := range tools {
 				if tool == nil {
 					continue
 				}
+				// 6. 加前缀！
 				name := si.name + "_" + tool.Name
 				item := map[string]interface{}{
 					"name":        name,
@@ -139,7 +146,6 @@ func RuntimeConnectHandler(w http.ResponseWriter, r *http.Request) {
 			"service_url": "",
 			"tools":       toolList,
 			"tools_count": len(toolList),
-			"duration_ms": time.Since(start).Milliseconds(),
 		}
 		writeRuntimeJSON(w, http.StatusOK, resp)
 		return
@@ -206,59 +212,111 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start := time.Now()
+	// runtime_verification.go 第 215-299 行
+	// 调用聚合节点工具的接口
+
+	start := time.Now() // 记录开始时间
+
+	// ===== 第1步：根据 nodeID 查数据库，找到节点 =====
 	var node models.AeMcpTaskNode
 	if err := models.GetDB().Where("id = ?", int32(req.NodeID)).First(&node).Error; err != nil {
 		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 		return
 	}
+
+	// ===== 第2步：判断是不是聚合节点 =====
 	if strings.TrimSpace(node.NodeHandle) == "aggregate_handle" {
+
+		// ===== 第3步：解析工具名 =====  (第222行)
+		// 用户调用的工具名可能是 "天气节点_get_weather"
+		// 需要用 "_" 分割成两部分：["天气节点", "get_weather"]
+		// SplitN 限制分割2次，所以结果是 ["天气节点", "get_weather"]
 		parts := strings.SplitN(strings.TrimSpace(req.ToolName), "_", 2)
+
+		// ===== 第4步：校验格式 =====  (第224行)
+		// 必须正好分成2部分，且两部分都不能为空
+		// 比如 "_get_weather" 或 "天气节点_" 都是不合法的
 		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid_aggregated_tool"})
 			return
 		}
-		targetClean := strings.TrimSpace(parts[0])
-		origTool := strings.TrimSpace(parts[1])
+
+		// ===== 第5步：提取前缀和原工具名 =====  (第228-229行)
+		// parts[0] = "天气节点" (前缀，节点名称)
+		// parts[1] = "get_weather" (原工具名)
+		targetClean := strings.TrimSpace(parts[0]) // 提取前缀并去空格: "天气节点"
+		origTool := strings.TrimSpace(parts[1])    // 提取原工具名: "get_weather"
+
+		// ===== 第6步：解析配置，获取子节点名称列表 =====  (第231-235行)
+		// 从数据库的 node_config 字段解析出配置的子节点名称
+		// 比如配置是 ["天气节点", "搜索节点"]，names 就是 ["天气节点", "搜索节点"]
 		names, err := task_nodes.ParseAggregateConfig(node.NodeConfig)
 		if err != nil {
 			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 			return
 		}
-		var sub *models.AeMcpTaskNode
+
+		// ===== 第7步：找到对应的子节点 =====  (第237-246行)
+		// 遍历配置的子节点名称列表，找到和前缀匹配的节点
+		var sub *models.AeMcpTaskNode // 子节点对象
 		for _, n := range names {
-			if strings.ReplaceAll(n, " ", "") == targetClean {
+			// 将配置中的节点名称空格换成下划线，然后和前缀比较
+			// 比如配置是 "天气 节点"，换成下划线后是 "天气_节点"，和 targetClean "天气_节点" 匹配
+			if strings.ReplaceAll(n, " ", "_") == targetClean {
+				// 找到匹配的节点，通过节点名称查询数据库获取完整节点信息
 				sub, err = (&models.AeMcpTaskNode{}).GetByNodeName(n)
+				// 如果查询失败、节点为空或未启用，则设为 nil
 				if err != nil || sub == nil || !sub.Enabled {
 					sub = nil
 				}
-				break
+				break // 找到后退出循环
 			}
 		}
+
+		// ===== 第8步：检查子节点是否存在 =====  (第248-252行)
+		// 如果没找到对应的子节点，返回错误
 		if sub == nil {
 			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "aggregated_target_not_found"})
 			return
 		}
+
+		// ===== 第9步：解析子节点的配置 =====  (第254-258行)
+		// 解析子节点的 node_config，获取协议、URL、超时等配置
 		cfgSub, err := task_nodes.ParseNodeRuntimeConfig(sub.NodeConfig)
 		if err != nil {
 			writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
 			return
 		}
+
+		// ===== 第10步：设置超时时间 =====  (第260-264行)
+		// 默认用子节点的配置超时时间
 		timeoutMS := cfgSub.TimeoutMS
+		// 如果请求中指定了超时时间，则使用请求中的超时时间
 		if req.Timeout > 0 {
-			timeoutMS = req.Timeout * 1000
+			timeoutMS = req.Timeout * 1000 // 转换为毫秒
 		}
+
+		// ===== 第11步：初始化子节点连接 =====  (第266-270行)
+		// 建立与子节点服务的连接
 		if err := pools.GetConnectPool().InitializeNode(sub.Id, cfgSub.Protocol, cfgSub.URL, timeoutMS, cfgSub.MaxConnect); err != nil {
 			writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{"success": false, "error": normalizeRuntimeInitError(err, cfgSub.URL)})
 			return
 		}
+
+		// ===== 第12步：解析调用参数 =====  (第272-279行)
+		// 用户调用工具时传入的参数，比如 {"city": "北京"}
 		args := make(map[string]interface{})
 		if len(req.Arguments) > 0 {
+			// 将 JSON 格式的参数解析成 Go 的 map
 			if err := json.Unmarshal(req.Arguments, &args); err != nil {
 				writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid_arguments_json"})
 				return
 			}
 		}
+
+		// ===== 第13步：调用子节点的工具 =====  (第281-289行)
+		// 关键：传入的是 origTool ("get_weather")，不是带前缀的工具名！
+		// 调用子节点的 CallToolByNode 方法执行工具
 		result, err := pools.GetConnectPool().CallToolByNode(sub.Id, origTool, args)
 		if err != nil {
 			writeRuntimeJSON(w, http.StatusBadGateway, map[string]interface{}{
@@ -269,26 +327,38 @@ func RuntimeCallHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+
+		// ===== 第14步：处理返回结果 =====  (第291-300行)
+		// 处理返回的内容，转换为通用格式
 		contentAny := interface{}(nil)
 		if result != nil && len(result.Content) > 0 {
+			// 将返回的内容序列化为 JSON，再反序列化为 interface{} 类型
 			if raw, err := json.Marshal(result.Content); err == nil {
 				_ = json.Unmarshal(raw, &contentAny)
 			}
 		}
+
+		// 判断是否返回了错误
 		isError := false
 		if result != nil {
 			isError = result.IsError
 		}
+
+		// ===== 第15步：返回成功响应 =====  (第302-308行)
 		resp := map[string]interface{}{
-			"success":     true,
-			"tool_name":   req.ToolName,
-			"is_error":    isError,
-			"content":     contentAny,
-			"duration_ms": time.Since(start).Milliseconds(),
+			"success":     true,                             // 成功标志
+			"tool_name":   req.ToolName,                     // 工具名称（带前缀）
+			"is_error":    isError,                          // 是否返回错误
+			"content":     contentAny,                       // 返回的内容
+			"duration_ms": time.Since(start).Milliseconds(), // 耗时
 		}
 		writeRuntimeJSON(w, http.StatusOK, resp)
 		return
 	}
+
+	//总结，用户需要我要天气节点_get_weather，我用前缀找对应的子节点"天气节点"，
+	// 然后用 origTool ("get_weather") 调用子节点的工具。
+	
 	nodeRec, cfg, err := loadRuntimeNodeConfig(int32(req.NodeID))
 	if err != nil {
 		writeRuntimeJSON(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": err.Error()})
