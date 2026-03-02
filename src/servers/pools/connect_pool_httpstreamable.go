@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -144,15 +145,15 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 			zap.Int32("node_id", nodeID),
 			zap.String("node_service_key", nodeServiceKey),
 			zap.String("url", connectInfo.Url),
-			zap.Int("connection_index", connectionIndex),
 			zap.Error(err))
 		if errorType == "connect_timeout" {
 			return nil, fmt.Errorf("connect_timeout: timeout=%d err=%w", int(connectTimeout/time.Millisecond), err)
 		}
 		return
 	}
+	connectionID := atomic.AddUint64(&globalConnectionID, 1)
 	connection = &ExternalConnection{
-		ConnectionID: fmt.Sprintf("connection_%d_%d", nodeID, connectionIndex),
+		ConnectionID: fmt.Sprintf("connection_%d_%d", nodeID, connectionID),
 		Session:      session,
 		Transport:    transport, // 保存 Transport 引用，用于关闭时释放空闲连接
 		LastPing:     time.Now(),
@@ -162,7 +163,6 @@ func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, co
 	logger.Info("创建HTTP连接成功",
 		zap.String("connection_id", connection.ConnectionID),
 		zap.Int32("node_id", nodeID),
-		zap.String("node_service_key", nodeServiceKey),
-		zap.Int("connection_index", connectionIndex))
+		zap.String("node_service_key", nodeServiceKey))
 	return
 }

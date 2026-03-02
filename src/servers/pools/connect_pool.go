@@ -90,6 +90,7 @@ func (ht *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 var (
 	GlobalConnectionPool *ConnectionPool
 	oncePool             sync.Once
+	globalConnectionID   uint64
 )
 
 // GetConnectPool 获取连接池
@@ -228,21 +229,19 @@ func (c *ConnectionPool) InitializeNode(nodeID int32, protocol, nodeURL string, 
 	return nil
 }
 
-// closeNodeServiceSessions 关闭节点实例下已建立的 MCP 会话。
+// closeNodeServiceSessions 关闭节点实例下已建立的连接资源。
 // 用于初始化失败或重建前的清理，避免半初始化连接残留。
-// 注意：这里只关闭 Session，Transport 的连接释放由 closeConnection 统一处理。
+// 统一走 closeConnection，确保 Session + Transport 都释放。
 func closeNodeServiceSessions(service *ExternalService) {
-	if service == nil {
-		return
-	}
-	if service.Instance == nil || len(service.Instance.Connections) == 0 {
+	closeServiceConnections(service)
+}
+
+func closeServiceConnections(service *ExternalService) {
+	if service == nil || service.Instance == nil || len(service.Instance.Connections) == 0 {
 		return
 	}
 	for _, conn := range service.Instance.Connections {
-		if conn == nil || conn.Session == nil {
-			continue
-		}
-		_ = conn.Session.Close()
+		closeConnection(conn, service.NodeServiceKey)
 	}
 }
 
@@ -268,7 +267,7 @@ func (c *ConnectionPool) fetchTools(session *mcp.ClientSession, timeout int) (li
 	return result.Tools, nil
 }
 
-// CallTool 调用工具（单实例多连接，选择可用连接；失败时仅重连当前连接并重试一次）。
+// CallTool 调用工具（单实例多连接，选择可用连接；失败时记录并返回错误）。
 func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[string]interface{}) (*mcp.CallToolResult, error) {
 	// 获取服务
 	service, err := c.getService(nodeServiceKey)
@@ -276,7 +275,7 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 		return nil, err
 	}
 
-	instance, connection, connectionIndex, err := getAvailableConnection(service)
+	_, connection, err := getAvailableConnection(service)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +290,6 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 		zap.String("node_service_key", nodeServiceKey),
 		zap.Int32("node_id", nodeID),
 		zap.String("tool_name", toolName),
-		zap.Int("selected_connection_index", connectionIndex),
 		zap.Int("args_count", argsCount))
 
 	// callOnce 封装单次调用：
@@ -329,14 +327,13 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 			zap.String("node_service_key", nodeServiceKey),
 			zap.Int32("node_id", nodeID),
 			zap.String("tool_name", toolName),
-			zap.Int("selected_connection_index", connectionIndex),
 			zap.Bool("success", true),
 			zap.Int("attempt", 1),
 			zap.Int64("latency_ms", elapsedMS))
 		return result, nil
 	}
 
-	// 首次失败先记日志，再进入快速重连。
+	// 首次失败先记日志，直接返回错误。
 	logger.Error("call_tool failed",
 		zap.String("stage", "call_tool"),
 		zap.String("error_type", errorType),
@@ -345,72 +342,9 @@ func (c *ConnectionPool) CallTool(nodeServiceKey, toolName string, args map[stri
 		zap.Int("attempt", 1),
 		zap.String("node_service_key", nodeServiceKey),
 		zap.Int32("node_id", nodeID),
-		zap.Int("connection_index", connectionIndex),
 		zap.String("tool_name", toolName),
 		zap.Error(callErr))
-
-	// 快速重连策略：仅重建当前槽位连接，避免影响其它健康连接。
-	retryConnection, reconnectErr := c.fastReconnectNodeConnection(service, instance, connectionIndex)
-	if reconnectErr != nil {
-		logger.Error("call_tool failed",
-			zap.String("stage", "call_tool_reconnect"),
-			zap.String("error_type", "reconnect_failed"),
-			zap.Int("attempt", 1),
-			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", nodeID),
-			zap.Int("connection_index", connectionIndex),
-			zap.String("tool_name", toolName),
-			zap.Error(reconnectErr))
-		logger.Info("call_tool end",
-			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", nodeID),
-			zap.String("tool_name", toolName),
-			zap.Int("selected_connection_index", connectionIndex),
-			zap.Bool("success", false),
-			zap.Int("attempt", 1),
-			zap.Int64("latency_ms", elapsedMS))
-		return nil, fmt.Errorf("%s: %v", errorType, callErr)
-	}
-
-	// 重试一次仍失败则透传最终错误，避免无限重试拖垮上游。
-	result, retryErrorType, retryErr, retryElapsedMS := callOnce(retryConnection)
-	if retryErr != nil {
-		logger.Error("call_tool failed",
-			zap.String("stage", "call_tool"),
-			zap.String("error_type", retryErrorType),
-			zap.Int("timeout", getCallTimeout(service.ConnectInfo)),
-			zap.Int64("elapsed_ms", retryElapsedMS),
-			zap.Int("attempt", 2),
-			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", nodeID),
-			zap.Int("connection_index", connectionIndex),
-			zap.String("tool_name", toolName),
-			zap.Error(retryErr))
-		logger.Info("call_tool end",
-			zap.String("node_service_key", nodeServiceKey),
-			zap.Int32("node_id", nodeID),
-			zap.String("tool_name", toolName),
-			zap.Int("selected_connection_index", connectionIndex),
-			zap.Bool("success", false),
-			zap.Int("attempt", 2),
-			zap.Int64("latency_ms", retryElapsedMS))
-		return nil, fmt.Errorf("%s: %v", retryErrorType, retryErr)
-	}
-
-	logger.Warn("call_tool recovered after reconnect",
-		zap.String("node_service_key", nodeServiceKey),
-		zap.Int32("node_id", nodeID),
-		zap.Int("connection_index", connectionIndex),
-		zap.String("tool_name", toolName))
-	logger.Info("call_tool end",
-		zap.String("node_service_key", nodeServiceKey),
-		zap.Int32("node_id", nodeID),
-		zap.String("tool_name", toolName),
-		zap.Int("selected_connection_index", connectionIndex),
-		zap.Bool("success", true),
-		zap.Int("attempt", 2),
-		zap.Int64("latency_ms", retryElapsedMS))
-	return result, nil
+	return nil, fmt.Errorf("%s: %v", errorType, callErr)
 }
 
 // CallToolByNode 按 node_id 调用工具（对外使用 node_id 时的便捷入口）。
@@ -499,11 +433,7 @@ func (c *ConnectionPool) removeService(nodeServiceKey string) error {
 	}
 
 	// remove 是显式释放场景，关闭该节点全部连接。
-	if service.Instance != nil {
-		for _, conn := range service.Instance.Connections {
-			closeConnection(conn, service.NodeServiceKey)
-		}
-	}
+	closeServiceConnections(service)
 	return nil
 }
 
@@ -516,12 +446,7 @@ func (c *ConnectionPool) Close() {
 
 	// 全量关闭时走 closeConnection，确保 Session + Transport 都释放。
 	for _, service := range c.services {
-		if service == nil || service.Instance == nil {
-			continue
-		}
-		for _, conn := range service.Instance.Connections {
-			closeConnection(conn, service.NodeServiceKey)
-		}
+		closeServiceConnections(service)
 	}
 	c.services = make(map[string]*ExternalService)
 }
@@ -619,7 +544,7 @@ func (c *ConnectionPool) maintainOnce() {
 
 		// 2) 健康检查（在锁外做 IO），不健康的连接会被关闭并移除。
 		healthy := make([]*ExternalConnection, 0, len(connsSnapshot))
-		for idx, conn := range connsSnapshot {
+		for _, conn := range connsSnapshot {
 			if conn == nil || conn.Session == nil {
 				continue
 			}
@@ -628,8 +553,7 @@ func (c *ConnectionPool) maintainOnce() {
 				logger.Warn("关闭异常会话",
 					zap.String("instance_id", inst.InstanceId),
 					zap.String("node_service_key", nodeServiceKey),
-					zap.Int32("node_id", nodeID),
-					zap.Int("connection_index", idx))
+					zap.Int32("node_id", nodeID))
 				continue
 			}
 			healthy = append(healthy, conn)
@@ -699,19 +623,19 @@ func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, conne
 	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.NodeID, connectionIndex)
 }
 
-// getAvailableConnection 轮询选择一条可用连接，返回连接槽位索引。
-func getAvailableConnection(service *ExternalService) (*ServiceInstance, *ExternalConnection, int, error) {
+// getAvailableConnection 轮询选择一条可用连接。
+func getAvailableConnection(service *ExternalService) (*ServiceInstance, *ExternalConnection, error) {
 	if service == nil {
-		return nil, nil, -1, fmt.Errorf("服务未初始化")
+		return nil, nil, fmt.Errorf("服务未初始化")
 	}
 	instance := service.Instance
 	if instance == nil {
-		return nil, nil, -1, fmt.Errorf("没有可用实例")
+		return nil, nil, fmt.Errorf("没有可用实例")
 	}
 	instance.mutex.Lock()
 	defer instance.mutex.Unlock()
 	if len(instance.Connections) == 0 {
-		return nil, nil, -1, fmt.Errorf("没有可用的连接")
+		return nil, nil, fmt.Errorf("没有可用的连接")
 	}
 	startIndex := instance.RoundRobinIndex
 	for i := 0; i < len(instance.Connections); i++ {
@@ -721,9 +645,9 @@ func getAvailableConnection(service *ExternalService) (*ServiceInstance, *Extern
 			continue
 		}
 		instance.RoundRobinIndex = (idx + 1) % len(instance.Connections)
-		return instance, conn, idx, nil
+		return instance, conn, nil
 	}
-	return nil, nil, -1, fmt.Errorf("没有可用的连接")
+	return nil, nil, fmt.Errorf("没有可用的连接")
 }
 
 // fastReconnectNodeConnection 快速重连指定连接槽位：
