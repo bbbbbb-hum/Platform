@@ -30,7 +30,7 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 		TargetConnections: targetConnections,
 	}
 	for i := 0; i < targetConnections; i++ {
-		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.NodeID, i)
+		connection, err1 := c.createHttpStreamableConnections(ctx, service.ConnectInfo, service.NodeID)
 		if err1 != nil {
 			// 保持历史行为：这里记录错误，但不抛出 err，交由上层统一判定失败。
 			logger.Error("创建http实例连接失败",
@@ -51,7 +51,7 @@ func (c *ConnectionPool) createInstancesForHttpStreamable(ctx context.Context, s
 // 说明：
 // - 为每条连接生成独立 Transport，便于释放空闲连接与避免共享污染。
 // - 使用节点统一超时，失败时带 error_type 与耗时便于排障。
-func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, nodeID int32, connectionIndex int) (connection *ExternalConnection, err error) {
+func (c *ConnectionPool) createHttpStreamableConnections(ctx context.Context, connectInfo *ConnectInfo, nodeID int32) (connection *ExternalConnection, err error) {
 	nodeServiceKey := buildNodeServiceKey(nodeID)
 	logger.Info("创建HTTP连接...",
 		zap.String("url", connectInfo.Url),

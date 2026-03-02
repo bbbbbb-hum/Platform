@@ -564,7 +564,7 @@ func (c *ConnectionPool) maintainOnce() {
 		inst.mutex.Unlock()
 		createdCount := 0
 		for currentConnections < targetConnections {
-			newConn, err := c.createReplacementConnection(svc, currentConnections)
+			newConn, err := c.createReplacementConnection(svc)
 			if err != nil {
 				logger.Warn("维护补齐连接失败",
 					zap.String("service_name", svc.ServiceName),
@@ -613,12 +613,12 @@ func (c *ConnectionPool) isSessionHealthy(session *mcp.ClientSession) bool {
 }
 
 // createReplacementConnection 针对实例创建一条新的 HTTP 连接（用于补齐/重连）。
-func (c *ConnectionPool) createReplacementConnection(svc *ExternalService, connectionIndex int) (*ExternalConnection, error) {
+func (c *ConnectionPool) createReplacementConnection(svc *ExternalService) (*ExternalConnection, error) {
 	ctx := context.Background()
 	if svc == nil || svc.ConnectInfo == nil {
 		return nil, fmt.Errorf("连接配置缺失")
 	}
-	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.NodeID, connectionIndex)
+	return c.createHttpStreamableConnections(ctx, svc.ConnectInfo, svc.NodeID)
 }
 
 // getAvailableConnection 轮询选择一条可用连接。
@@ -646,48 +646,6 @@ func getAvailableConnection(service *ExternalService) (*ServiceInstance, *Extern
 		return instance, conn, nil
 	}
 	return nil, nil, fmt.Errorf("没有可用的连接")
-}
-
-// fastReconnectNodeConnection 快速重连指定连接槽位：
-// 仅重建当前槽位，避免影响同节点其它健康连接。
-func (c *ConnectionPool) fastReconnectNodeConnection(service *ExternalService, instance *ServiceInstance, connectionIndex int) (*ExternalConnection, error) {
-	if service == nil || instance == nil {
-		return nil, fmt.Errorf("没有可用实例")
-	}
-	if connectionIndex < 0 {
-		return nil, fmt.Errorf("连接索引无效")
-	}
-
-	// Step A: 先把实例上的连接指针置空，阻断并发请求继续使用旧连接。
-	instance.mutex.Lock()
-	if connectionIndex >= len(instance.Connections) {
-		instance.mutex.Unlock()
-		return nil, fmt.Errorf("连接索引越界")
-	}
-	oldConnection := instance.Connections[connectionIndex]
-	instance.Connections[connectionIndex] = nil
-	instance.mutex.Unlock()
-
-	// Step B: 销毁旧连接（若存在），释放 Session/Transport 资源。
-	if oldConnection != nil {
-		closeConnection(oldConnection, instance.InstanceId)
-	}
-
-	// Step C: 基于同一 service 配置创建新连接。
-	newConn, err := c.createReplacementConnection(service, connectionIndex)
-	if err != nil {
-		return nil, err
-	}
-
-	// Step D: 安装新连接，后续请求即可直接复用。
-	instance.mutex.Lock()
-	if connectionIndex < len(instance.Connections) {
-		instance.Connections[connectionIndex] = newConn
-	} else {
-		instance.Connections = append(instance.Connections, newConn)
-	}
-	instance.mutex.Unlock()
-	return newConn, nil
 }
 
 // buildNodeConfigFingerprint 生成配置指纹，用于判断是否需要重建连接池。
