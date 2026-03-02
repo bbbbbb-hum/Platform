@@ -19,9 +19,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// McpServicesMap 以 server_id 为键的服务实例缓存，对应 /mcp-server/{server_id} 路由。
 var McpServicesMap = map[string]*Server{}
+// RequestLogs 请求日志缓存（链路节点写入，后续入库/发布）。
 var RequestLogs = map[string]*models.AeMcpServicesRequestLogs{}
 
+// Server 封装单个对外 MCP 服务实例（对应数据库服务配置）。
+// 说明：
+// - mcpServer 负责对外协议交互
+// - ChainInstance 负责链路编排与节点调用
+// - toolDescList 为链路汇总后的工具清单
 type Server struct {
 	ServerName    string
 	mcpServer     *mcp.Server
@@ -35,6 +42,10 @@ func (s *Server) GetServer() *mcp.Server {
 	return s.mcpServer
 }
 
+// Initialize 初始化所有 MCP 服务：
+// - 从数据库读取服务配置
+// - 构建 Server 实例并挂入 McpServicesMap
+// - 以数据库为准重建内存缓存
 func Initialize() error {
 	logger.Info("开始初始化MCP服务...")
 	// 获取所有MCP服务配置
@@ -72,7 +83,7 @@ func Initialize() error {
 	return nil
 }
 
-// InitializeByServiceId 根据服务ID初始化MCP服务
+// InitializeByServiceId 按服务主键初始化单个 MCP 服务（管理侧单服初始化入口）。
 func InitializeByServiceId(id int32) error {
 	service := &models.AeMcpServices{}
 	err := service.GetOne(id)
@@ -95,7 +106,10 @@ func InitializeByServiceId(id int32) error {
 	return nil
 }
 
-// 创建MCP服务实例
+// createMcpServer 创建单个 MCP 服务实例：
+// - 创建 MCP Server
+// - 初始化任务链（含节点实例）
+// - 汇总工具并注册到 MCP Server
 func createMcpServer(service *models.AeMcpServices) *Server {
 	server := &Server{
 		ServerName: service.ServerName,
@@ -131,8 +145,9 @@ func createMcpServer(service *models.AeMcpServices) *Server {
 	}
 	// 将链挂到server下中
 	server.ChainInstance = chainInstance
-	// 获取工具列表并注册
-	// 注意：工具列表是链上各节点聚合后的结果（尤其含 proxy 节点透出的外部工具）。
+	// 获取工具列表并注册：
+	// - 工具列表来自链上各节点聚合（包含 proxy 节点的外部工具）
+	// - 注册时做 schema 统一与错误保护
 	server.toolDescList = server.ChainInstance.GetTools(&types.RunningContext{})
 
 	//
@@ -234,7 +249,7 @@ func safeAddTool(server *Server, tool *types.ToolDesc) (ok bool) {
 			ok = false
 		}
 	}()
-	mcp.AddTool[map[string]interface{}](server.mcpServer, &mcp.Tool{
+	mcp.AddTool(server.mcpServer, &mcp.Tool{
 		Name:        tool.ToolName,
 		Description: tool.ToolDesc,
 		Title:       fmt.Sprintf("%s Tool", tool.ToolName),

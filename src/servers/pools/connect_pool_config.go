@@ -1,48 +1,45 @@
 package pools
 
 import (
-	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
 	"strconv"
 	"strings"
 )
 
+// 连接池运行参数与键规则的集中封装：
+// - 默认超时与并发
+// - 超时统一获取（节点优先、默认兜底）
+// - 并发归一化策略
+// - 节点服务键生成/解析
 const (
-	defaultConnectTimeoutMS = 30000
+	defaultConnectTimeout   = 30000
 	defaultListToolsTimeout = 15000
-	defaultCallTimeoutMS    = 30000
+	defaultCallTimeout      = 30000
 	defaultNodeMaxConnect   = 1
-	maxNodeMaxConnect       = 8
 	nodeServicePrefix       = "node:"
 )
 
-func getConnectTimeoutMS(connectInfo *ConnectInfo) int {
+func getConnectTimeout(connectInfo *ConnectInfo) int {
 	if connectInfo != nil && connectInfo.ConnectTimeout > 0 {
 		return connectInfo.ConnectTimeout
 	}
-	return helperConfig.GetInt("MCP_CONNECT_TIMEOUT_MS", defaultConnectTimeoutMS)
+	return defaultConnectTimeout
 }
 
-func getListToolsTimeoutMS() int {
-	return helperConfig.GetInt("MCP_LISTTOOLS_TIMEOUT_MS", defaultListToolsTimeout)
+func getListToolsTimeout() int {
+	return defaultListToolsTimeout
 }
 
-func getCallTimeoutMS(connectInfo *ConnectInfo) int {
+func getCallTimeout(connectInfo *ConnectInfo) int {
 	if connectInfo != nil && connectInfo.CallTimeout > 0 {
 		return connectInfo.CallTimeout
 	}
-	return helperConfig.GetInt("MCP_CALL_TIMEOUT_MS", defaultCallTimeoutMS)
+	return defaultCallTimeout
 }
 
 func normalizeNodeMaxConnect(requested int) (int, string) {
 	val := requested
 	if val <= 0 {
-		val = helperConfig.GetInt("MCP_NODE_MAX_CONNECT", defaultNodeMaxConnect)
-		if val <= 0 {
-			return defaultNodeMaxConnect, "fallback_default"
-		}
-	}
-	if val > maxNodeMaxConnect {
-		return maxNodeMaxConnect, "clamped_max"
+		val = defaultNodeMaxConnect
 	}
 	if requested <= 0 {
 		return val, "fallback_global"

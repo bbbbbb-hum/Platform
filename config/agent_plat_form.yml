@@ -49,12 +49,3 @@ NATS_STREAM_MAX_AGE_HOURS: 24 #消息最大保留时间（小时）
 NATS_STREAM_REPLICAS: 1 # 流副本数
 
 NAMESPACE: local-dev # pod命名空间
-LOG_LEVEL: info //日志等级
-LOG_TYPE: console //日志类型 只有一个 console 选项
-
-ENABLED_PROTOCOLS: http // 协议开关，默认仅启用http
-MCP_CONNECT_TIMEOUT_MS: 30000 // 建连超时（毫秒）
-MCP_LISTTOOLS_TIMEOUT_MS: 15000 // 工具发现超时（毫秒）
-MCP_CALL_TIMEOUT_MS: 30000 // 工具调用超时（毫秒）
-VERIFICATION_TOKEN: "" // 平台运行验证令牌（为空时仅允许内网来源）
-VERIFICATION_DEFAULT_TIMEOUT_SEC: 30 // 平台运行验证默认超时（秒）
