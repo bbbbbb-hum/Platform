@@ -48,34 +48,37 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 // 输入：数据库里存储的 node_config 字符串，比如 '"[\"天气节点\", \"搜索节点\"]"'
 // 输出：Go 的字符串数组，比如 ["天气节点", "搜索节点"]
 
-func ParseAggregateConfig(raw string) ([]string, error) {
-
-	// ===== 第1步：去除首尾空格 =====
-	// raw 是从数据库读取的字符串，可能包含多余空格
-	// 比如 '  ["天气节点", "搜索节点"]  '
-	// TrimSpace 会去掉首尾的空白字符
+// ParseAggregateConfigIDs 解析聚合节点配置，返回子节点ID列表
+func ParseAggregateConfigIDs(raw string) ([]int32, error) {
 	trimmed := strings.TrimSpace(raw)
-
-	// 如果去掉空格后是空字符串，说明配置为空
 	if trimmed == "" {
-		// 返回错误
 		return nil, fmt.Errorf("invalid_aggregate_config: config is empty")
 	}
-
-	// ===== 第2步：解析 JSON 数组 =====
-	// 声明一个字符串切片，用来存放解析后的节点名称
-	var nodeNames []string
-
-	// 使用 json.Unmarshal 将 JSON 字符串解析成 Go 的切片
-	// 输入: trimmed = '"[\"天气节点\", \"搜索节点\"]"'
-	// 输出: nodeNames = ["天气节点", "搜索节点"]
-	if err := json.Unmarshal([]byte(trimmed), &nodeNames); err != nil {
-		// 如果解析失败（比如 JSON 格式不对），返回错误
+    //把 JSON 格式的数字数组 "[1, 2, 3]" 解析成 Go 的整数切片 []int32{1, 2, 3} 。
+	//JSON 格式的数字数组 "[1, 2, 3]"是数据库里存的
+	var nodeIDs []int32
+	if err := json.Unmarshal([]byte(trimmed), &nodeIDs); err != nil {
 		return nil, fmt.Errorf("invalid_aggregate_config: parse json failed: %w", err)
 	}
 
-	// ===== 第3步：检查数组是否为空 =====
-	// 如果解析后数组长度为 0，说明配置错误
+	if len(nodeIDs) == 0 {
+		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
+	}
+
+	return nodeIDs, nil
+}
+
+func ParseAggregateConfig(raw string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, fmt.Errorf("invalid_aggregate_config: config is empty")
+	}
+
+	var nodeNames []string
+	if err := json.Unmarshal([]byte(trimmed), &nodeNames); err != nil {
+		return nil, fmt.Errorf("invalid_aggregate_config: parse json failed: %w", err)
+	}
+
 	if len(nodeNames) == 0 {
 		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
 	}

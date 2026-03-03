@@ -185,39 +185,6 @@ func main() {
 			w.Write([]byte("MCP服务初始化完成"))
 		})
 
-		// 热更新聚合节点配置接口
-		// 定义路由：POST /debug/mcp-server/reload-by-node/{node_name}
-		mux.HandleFunc("/debug/mcp-server/reload-by-node/{node_name}", func(w http.ResponseWriter, r *http.Request) {
-
-			// 1. 检查必须是 POST 请求
-			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-
-			// 2. 从 URL 提取 node_name
-			// 比如 URL 是 /debug/mcp-server/reload-by-node/天气_服务
-			// 提取出来就是 "天气_服务"
-			nodeName := r.URL.Path[len("/debug/mcp-server/reload-by-node/"):]
-
-			// 3. 检查 node_name 不能为空
-			if nodeName == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte("node_name is required"))
-				return
-			}
-
-			// 4. 调用 ReloadAggregateNodeByName 刷新配置
-			if err := servers.ReloadAggregateNodeByName(nodeName); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
-			}
-
-			// 5. 返回成功
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("reload success"))
-		})
 	}
 
 	// 使用 Prometheus 中间件包装（先包装 Handler，再添加认证，最后添加指标收集）

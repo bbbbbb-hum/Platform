@@ -18,9 +18,8 @@ type AggregateNode struct {
 	NodeInfo       *types.NodeInfo
 	mapToolInfos   map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
 	mapNodeHandles map[string]types.Processor // 节点名 -> 节点实例
-	subNodeNames   []string                   // 配置的子节点名称列表
-	initConfig     types.InitConfig           // 保存初始化配置用于热更新
-	currentConfig  string                     // 当前配置的原始字符串，用于热更新时对比
+	subNodeIDs     []int32                    // 配置的子节点ID列表
+	initConfig     types.InitConfig           // 保存初始化配置
 }
 
 // AggregatedTool 聚合后的工具信息
@@ -36,7 +35,6 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 	logger.Info("初始化聚合节点", zap.Int32("node_id", config.NodeModel.Id))
 
 	a.initConfig = config
-	// 1. 保存节点基本信息
 	a.NodeInfo = &types.NodeInfo{
 		ServiceID:   config.ServiceID,
 		ChainID:     config.ChainModel.Id,
@@ -47,17 +45,13 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 		Enabled:     true,
 	}
 
-	// 2. 解析 node_config，得到子节点名称列表 ["天气节点", "搜索节点"]
-	subNodeNames, err := ParseAggregateConfig(config.NodeModel.NodeConfig) //ParseAggregateConfig是解析聚合节点配置，返回子节点名称列表(去空格)
+	// 解析 node_config，得到子节点ID列表 [1, 2, 3]
+	subNodeIDs, err := ParseAggregateConfigIDs(config.NodeModel.NodeConfig)
 	if err != nil {
 		return fmt.Errorf("parse_aggregate_config_failed: %w", err)
 	}
-	a.subNodeNames = subNodeNames
+	a.subNodeIDs = subNodeIDs
 
-	// 3. 保存当前配置用于热更新时对比
-	a.currentConfig = config.NodeModel.NodeConfig
-
-	// 初始化子节点
 	return a.initSubNodes(config)
 }
 
@@ -66,52 +60,43 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	// 1. 初始化两个map
-	a.mapNodeHandles = make(map[string]types.Processor) // 存节点实例
-	a.mapToolInfos = make(map[string]*AggregatedTool)   // 存工具信息
+	a.mapNodeHandles = make(map[string]types.Processor)
+	a.mapToolInfos = make(map[string]*AggregatedTool)
 
 	nodeModel := &models.AeMcpTaskNode{}
-	for _, nodeName := range a.subNodeNames {
-		// 根据节点名称查询节点信息
-		subNode, err := nodeModel.GetByNodeName(nodeName)
-		if err != nil {
-			logger.Error("查询子节点失败", zap.String("node_name", nodeName), zap.Error(err))
-			continue
-		}
+	err, subNodes := nodeModel.GetChianNodes(a.subNodeIDs)
+	if err != nil {
+		return fmt.Errorf("query_sub_nodes_failed: %w", err)
+	}
 
-		// 防止循环依赖：子节点不能是聚合节点
+	for _, subNode := range subNodes {
 		if subNode.NodeHandle == "aggregate_handle" {
-			logger.Error("子节点不能是聚合节点", zap.String("node_name", nodeName))
+			logger.Error("子节点不能是聚合节点", zap.Int32("node_id", subNode.Id))
 			continue
 		}
 
-		// 创建子节点实例
 		processor, ok := CreateNodeByType(subNode.NodeHandle)
 		if !ok {
 			logger.Error("不支持的子节点类型", zap.String("node_handle", subNode.NodeHandle))
 			continue
 		}
 
-		// 初始化子节点
 		err = processor.Init(types.InitConfig{
 			ServiceID:  config.ServiceID,
 			ChainModel: config.ChainModel,
 			NodeModel:  subNode,
 		})
 		if err != nil {
-			logger.Error("初始化子节点失败", zap.String("node_name", nodeName), zap.Error(err))
+			logger.Error("初始化子节点失败", zap.Int32("node_id", subNode.Id), zap.Error(err))
 			continue
 		}
 
-		// 存储子节点实例
-		cleanName := strings.ReplaceAll(nodeName, " ", "_")
+		cleanName := strings.ReplaceAll(subNode.NodeName, " ", "_")
 		a.mapNodeHandles[cleanName] = processor
-		logger.Info("成功初始化子节点", zap.String("node_name", nodeName))
+		logger.Info("成功初始化子节点", zap.Int32("node_id", subNode.Id), zap.String("node_name", subNode.NodeName))
 	}
 
-	// 构建工具映射表
 	a.buildToolInfos()
-
 	return nil
 }
 
@@ -184,69 +169,4 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 // GetNodeInfo 获取节点信息
 func (a *AggregateNode) GetNodeInfo() *types.NodeInfo {
 	return a.NodeInfo
-}
-
-// GetCurrentConfig 获取当前配置
-func (a *AggregateNode) GetCurrentConfig() string {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-	return a.currentConfig
-}
-
-// ReloadFromDatabase 从数据库重新加载配置并热更新
-// 这是对外暴露的热更新入口，封装了数据库读取和配置对比逻辑
-func (a *AggregateNode) ReloadFromDatabase() error {
-	nodeID := a.NodeInfo.NodeID
-	logger.Info("从数据库重新加载聚合节点配置", zap.Int32("node_id", nodeID))
-
-	// 1. 从数据库读取最新配置
-	nodeModel := &models.AeMcpTaskNode{}
-	err, nodes := nodeModel.GetChianNodes([]int32{nodeID})
-	if err != nil || len(nodes) == 0 {
-		return fmt.Errorf("get_node_config_from_db_failed: %w", err)
-	}
-
-	newConfig := nodes[0].NodeConfig
-
-	// 2. 检查配置是否变化
-	a.mutex.RLock()
-	oldConfig := a.currentConfig
-	a.mutex.RUnlock()
-
-	if newConfig == oldConfig {
-		logger.Info("配置未变化，跳过刷新",
-			zap.Int32("node_id", nodeID),
-			zap.String("config", newConfig))
-		return nil
-	}
-
-	logger.Info("检测到配置变化，开始刷新",
-		zap.Int32("node_id", nodeID),
-		zap.String("old_config", oldConfig),
-		zap.String("new_config", newConfig))
-
-	// 3. 刷新配置
-	return a.RefreshConfig(newConfig)
-}
-
-// RefreshConfig 热更新配置
-// 注意：此方法会获取写锁，因为需要修改节点的内部状态
-func (a *AggregateNode) RefreshConfig(newConfig string) error {
-	logger.Info("开始热更新聚合节点配置", zap.Int32("node_id", a.NodeInfo.NodeID))
-
-	// 解析新配置（在加锁前先验证，减少锁持有时间）
-	newSubNodeNames, err := ParseAggregateConfig(newConfig)
-	if err != nil {
-		return fmt.Errorf("parse_new_config_failed: %w", err)
-	}
-
-	// 先更新配置字段（这些字段在 initSubNodes 外部，需要单独保护）
-	a.mutex.Lock()
-	a.subNodeNames = newSubNodeNames
-	a.initConfig.NodeModel.NodeConfig = newConfig
-	a.currentConfig = newConfig
-	a.mutex.Unlock()
-
-	// 重新初始化子节点（initSubNodes 内部会再次获取写锁）
-	return a.initSubNodes(a.initConfig)
 }
