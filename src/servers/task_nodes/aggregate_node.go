@@ -14,12 +14,13 @@ import (
 
 // AggregateNode 聚合节点，将多个子节点的工具聚合到一个服务中
 type AggregateNode struct {
-	mutex          sync.RWMutex
-	NodeInfo       *types.NodeInfo
-	mapToolInfos   map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
-	mapNodeHandles map[string]types.Processor // 节点名 -> 节点实例
-	subNodeIDs     []int32                    // 配置的子节点ID列表
-	initConfig     types.InitConfig           // 保存初始化配置
+	mutex           sync.RWMutex
+	NodeInfo        *types.NodeInfo
+	mapToolInfos    map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
+	mapNodeHandles  map[string]types.Processor // 节点名 -> 节点实例
+	mapServiceNames map[string]string          // 节点名 -> 服务名（从URL提取）
+	subNodeIDs      []int32                    // 配置的子节点ID列表
+	initConfig      types.InitConfig           // 保存初始化配置
 }
 
 // AggregatedTool 聚合后的工具信息
@@ -62,6 +63,7 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 
 	a.mapNodeHandles = make(map[string]types.Processor)
 	a.mapToolInfos = make(map[string]*AggregatedTool)
+	a.mapServiceNames = make(map[string]string)
 
 	nodeModel := &models.AeMcpTaskNode{}
 	err, subNodes := nodeModel.GetChianNodes(a.subNodeIDs)
@@ -92,16 +94,26 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 		}
 
 		cleanName := strings.ReplaceAll(subNode.NodeName, " ", "_")
+
+		// 从 node_config 提取服务名
+		serviceName, err := ExtractServiceNameFromURL(subNode.NodeConfig)
+		if err != nil {
+			logger.Error("提取服务名失败", zap.Int32("node_id", subNode.Id), zap.Error(err))
+			continue
+		}
+
 		a.mapNodeHandles[cleanName] = processor
-		logger.Info("成功初始化子节点", zap.Int32("node_id", subNode.Id), zap.String("node_name", subNode.NodeName))
+		a.mapServiceNames[cleanName] = serviceName
+
+		logger.Info("成功初始化子节点",
+			zap.Int32("node_id", subNode.Id),
+			zap.String("node_name", subNode.NodeName),
+			zap.String("service_name", serviceName))
 	}
 
 	a.buildToolInfos()
 	return nil
 }
-
-//map_NodeHandles的意义是让节点名称对应到具体的节点实例
-//map_ToolInfos的意义是让聚合后的工具名对应具体的工具信息，有多少工具可用，每个工具的详细信息
 
 // buildToolInfos 构建聚合后的工具映射表
 func (a *AggregateNode) buildToolInfos() {
@@ -112,12 +124,14 @@ func (a *AggregateNode) buildToolInfos() {
 		// 获取这个子节点的所有工具
 		tools := processor.GetTools(&types.RunningContext{})
 
+		// 获取该节点对应的服务名
+		serviceName := a.mapServiceNames[nodeName]
+
 		// 遍历每个工具
 		for _, tool := range tools {
-			// 关键：加前缀防重名！
-			// 原工具名: get_weather
-			// 加前缀后: 天气节点_get_weather
-			aggregatedName := nodeName + "_" + tool.ToolName
+			// 新规则：E_服务名_工具名
+			// 例如：E_Serpapi_search
+			aggregatedName := "E_" + serviceName + "_" + tool.ToolName
 
 			// 存到 map_ToolInfos
 			a.mapToolInfos[aggregatedName] = &AggregatedTool{
@@ -140,7 +154,7 @@ func (a *AggregateNode) GetTools(rc *types.RunningContext) []*types.ToolDesc {
 	// 遍历 map_ToolInfos，返回所有工具
 	for aggregatedName, aggTool := range a.mapToolInfos {
 		toolList = append(toolList, &types.ToolDesc{
-			ToolName:        aggregatedName, // "天气节点_get_weather"
+			ToolName:        aggregatedName, // "E_Serpapi_search"
 			ToolDesc:        aggTool.ToolDesc.ToolDesc,
 			ToolInputSchema: aggTool.ToolDesc.ToolInputSchema,
 		})
@@ -161,7 +175,7 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 		return nil, fmt.Errorf("tool_not_found: %s", userCmd)
 	}
 
-	// 2. 调用子节点处理
+	// 调用子节点处理
 	// 关键：传入 OriginalName (原工具名)，不是带前缀的！
 	return aggTool.Node.Process(rc, aggTool.OriginalName, userParamMap, lastStepResp)
 }

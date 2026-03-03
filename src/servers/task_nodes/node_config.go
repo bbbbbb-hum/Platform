@@ -43,10 +43,6 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 	return cfg, nil
 }
 
-// ParseAggregateConfig 解析聚合节点配置，返回子节点名称列表
-
-// 输入：数据库里存储的 node_config 字符串，比如 '"[\"天气节点\", \"搜索节点\"]"'
-// 输出：Go 的字符串数组，比如 ["天气节点", "搜索节点"]
 
 // ParseAggregateConfigIDs 解析聚合节点配置，返回子节点ID列表
 func ParseAggregateConfigIDs(raw string) ([]int32, error) {
@@ -64,37 +60,42 @@ func ParseAggregateConfigIDs(raw string) ([]int32, error) {
 	if len(nodeIDs) == 0 {
 		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
 	}
-
-	return nodeIDs, nil
+return nodeIDs, nil
 }
 
-func ParseAggregateConfig(raw string) ([]string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, fmt.Errorf("invalid_aggregate_config: config is empty")
-	}
-
-	var nodeNames []string
-	if err := json.Unmarshal([]byte(trimmed), &nodeNames); err != nil {
-		return nil, fmt.Errorf("invalid_aggregate_config: parse json failed: %w", err)
-	}
-
-	if len(nodeNames) == 0 {
-		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
-	}
-
-	// ===== 第4步：去除每个元素的首尾空格 =====
-	// 遍历数组中的每个元素，去掉首尾空格
-	// 比如 " 天气节点 " 变成 "天气节点"
-	// 这样可以防止配置中有多余空格导致匹配失败
-	for i, name := range nodeNames {
-		nodeNames[i] = strings.TrimSpace(name)
-	}
-
-	// ===== 第5步：返回结果 =====
-	// 返回解析后的数组和 nil 错误
-	return nodeNames, nil
+// ExtractServiceNameFromURL 从 node_config 的 URL 中提取服务名
+// 规则：提取第二个和第三个 _ 之间的字段
+// 例如：http://xxx_Serpapi_xxx -> Serpapi
+func ExtractServiceNameFromURL(nodeConfig string) (string, error) {
+cfg, err := ParseNodeRuntimeConfig(nodeConfig)
+if err != nil {
+	return "", err
 }
 
-// 总结：ParseAggregateConfig 函数负责解析聚合节点的配置字符串，将其转换为 Go 语言中的字符串数组。
-// 它会进行多个步骤的校验和处理，确保配置的正确性和完整性。 todo，如果比方说是天气 服务 节点，那么子节点名称就是"天气节点"，还是改成天气_服务
+url := cfg.URL
+// 查找所有 _ 的位置
+underscorePositions := []int{}
+for i, ch := range url {
+	if ch == '_' {
+		underscorePositions = append(underscorePositions, i)
+	}
+}
+
+// 需要至少3个下划线才能提取第二个和第三个之间的内容
+if len(underscorePositions) < 3 {
+	return "", fmt.Errorf("url format invalid: need at least 3 underscores, got %d", len(underscorePositions))
+}
+
+// 提取第二个和第三个 _ 之间的字段（索引1和2）
+start := underscorePositions[1] + 1
+end := underscorePositions[2]
+serviceName := url[start:end]
+
+if serviceName == "" {
+	return "", fmt.Errorf("extracted service name is empty")
+}
+
+return serviceName, nil
+}
+
+
