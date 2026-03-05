@@ -14,16 +14,16 @@ import (
 
 // AggregateNode 聚合节点，将多个子节点的工具聚合到一个服务中
 type AggregateNode struct {
-	toolList   []*types.ToolDesc          // 预计算的工具列表
-	toolToNode map[string]types.Processor // 聚合工具名 -> 节点实例
+	toolList   []*types.ToolDesc          // 预计算的工具列表 缓存所有聚合后的工具描述，供 GetTools() 快速返回
+	toolToNode map[string]types.Processor // 聚合工具名 -> 节点实例  路由表，根据工具名找到对应的子节点处理器
 	NodeInfo   *types.NodeInfo
-	mutex      sync.RWMutex
+	mutex      sync.RWMutex // 保护并发访问， RLock 用于读操作， Lock 用于写操作
 }
 
 // Init 初始化聚合节点
 func (a *AggregateNode) Init(config types.InitConfig) error {
 	logger.Info("初始化聚合节点", zap.Int32("node_id", config.NodeModel.Id))
-
+// 1. 设置节点基本信息
 	a.NodeInfo = &types.NodeInfo{
 		ServiceID:   config.ServiceID,
 		ChainID:     config.ChainModel.Id,
@@ -33,12 +33,12 @@ func (a *AggregateNode) Init(config types.InitConfig) error {
 		Description: config.NodeModel.Description,
 		Enabled:     true,
 	}
-
+// 2. 解析配置中的子节点名称列表
 	subNodeNames, err := ParseAggregateConfigNames(config.NodeModel.NodeConfig)
 	if err != nil {
 		return fmt.Errorf("parse_aggregate_config_failed: %w", err)
 	}
-
+// 3. 初始化所有子节点
 	return a.initSubNodes(config, subNodeNames)
 }
 
@@ -55,6 +55,7 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig, subNodeNames []str
 	if err != nil {
 		return fmt.Errorf("query_sub_nodes_failed: %w", err)
 	}
+	
 
 	for _, subNode := range subNodes {
 		if subNode.NodeHandle == "aggregate_handle" {
@@ -107,13 +108,19 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
+    // 1. 根据聚合工具名查找对应的子节点处理器
 	processor, ok := a.toolToNode[userCmd]
 	if !ok {
 		return nil, fmt.Errorf("tool_not_found: %s", userCmd)
 	}
-
+// 2. 解析原始工具名（去掉前缀 E_NodeName_）
 	originalName := parseOriginalToolName(userCmd)
+// 3. 转发给子节点处理（使用原始工具名）
 	return processor.Process(rc, originalName, userParamMap, lastStepResp)
+	//processor 子节点的处理器实例（通过 toolToNode[userCmd] 查找到的）
+	//.Process(...) 调用子节点的 Process 方法执行实际工具调用
+	//originalName 是子节点实际使用的工具名，而 userCmd 是聚合后的工具名
+	// 子节点处理时，会根据 originalName 去查找对应的工具实现
 }
 
 // GetNodeInfo 获取节点信息
