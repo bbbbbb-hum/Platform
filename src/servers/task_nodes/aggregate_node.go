@@ -5,7 +5,6 @@ import (
 	"AgentEarth_AgentPlatform/src/models"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -17,8 +16,8 @@ type AggregateNode struct {
 	mutex           sync.RWMutex
 	NodeInfo        *types.NodeInfo
 	mapToolInfos    map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
-	mapNodeHandles  map[string]types.Processor // 节点名 -> 节点实例
-	mapServiceNames map[string]string          // 节点名 -> 服务名（从URL提取）
+	mapNodeHandles  map[int32]types.Processor  // 节点ID -> 节点实例
+	mapServiceNames map[int32]string           // 节点ID -> 服务名（从URL提取）
 	subNodeIDs      []int32                    // 配置的子节点ID列表
 	initConfig      types.InitConfig           // 保存初始化配置
 }
@@ -26,7 +25,6 @@ type AggregateNode struct {
 // AggregatedTool 聚合后的工具信息
 type AggregatedTool struct {
 	OriginalName string          // 原始工具名
-	NodeName     string          // 所属节点名（去空格后）
 	ToolDesc     *types.ToolDesc // 工具描述
 	Node         types.Processor // 对应的节点实例
 }
@@ -61,9 +59,9 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	a.mapNodeHandles = make(map[string]types.Processor)
+	a.mapNodeHandles = make(map[int32]types.Processor)
 	a.mapToolInfos = make(map[string]*AggregatedTool)
-	a.mapServiceNames = make(map[string]string)
+	a.mapServiceNames = make(map[int32]string)
 
 	nodeModel := &models.AeMcpTaskNode{}
 	err, subNodes := nodeModel.GetChianNodes(a.subNodeIDs)
@@ -93,21 +91,17 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 			continue
 		}
 
-		cleanName := strings.ReplaceAll(subNode.NodeName, " ", "_")
-
-		// 从 node_config 提取服务名
 		serviceName, err := ExtractServiceNameFromURL(subNode.NodeConfig)
 		if err != nil {
 			logger.Error("提取服务名失败", zap.Int32("node_id", subNode.Id), zap.Error(err))
 			continue
 		}
 
-		a.mapNodeHandles[cleanName] = processor
-		a.mapServiceNames[cleanName] = serviceName
+		a.mapNodeHandles[subNode.Id] = processor
+		a.mapServiceNames[subNode.Id] = serviceName
 
 		logger.Info("成功初始化子节点",
 			zap.Int32("node_id", subNode.Id),
-			zap.String("node_name", subNode.NodeName),
 			zap.String("service_name", serviceName))
 	}
 
@@ -119,26 +113,17 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig) error {
 func (a *AggregateNode) buildToolInfos() {
 	a.mapToolInfos = make(map[string]*AggregatedTool)
 
-	// 遍历每个子节点
-	for nodeName, processor := range a.mapNodeHandles {
-		// 获取这个子节点的所有工具
+	for nodeID, processor := range a.mapNodeHandles {
 		tools := processor.GetTools(&types.RunningContext{})
+		serviceName := a.mapServiceNames[nodeID]
 
-		// 获取该节点对应的服务名
-		serviceName := a.mapServiceNames[nodeName]
-
-		// 遍历每个工具
 		for _, tool := range tools {
-			// 新规则：E_服务名_工具名
-			// 例如：E_Serpapi_search
 			aggregatedName := "E_" + serviceName + "_" + tool.ToolName
 
-			// 存到 map_ToolInfos
 			a.mapToolInfos[aggregatedName] = &AggregatedTool{
-				OriginalName: tool.ToolName, // 原名
-				NodeName:     nodeName,      // 属于哪个节点
-				ToolDesc:     tool,          // 工具详情
-				Node:         processor,     // 节点实例（能干活的人）
+				OriginalName: tool.ToolName,
+				ToolDesc:     tool,
+				Node:         processor,
 			}
 		}
 	}
@@ -169,14 +154,11 @@ func (a *AggregateNode) Process(rc *types.RunningContext, userCmd string, userPa
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
-	// 查找对应的聚合工具
 	aggTool, ok := a.mapToolInfos[userCmd]
 	if !ok {
 		return nil, fmt.Errorf("tool_not_found: %s", userCmd)
 	}
 
-	// 调用子节点处理
-	// 关键：传入 OriginalName (原工具名)，不是带前缀的！
 	return aggTool.Node.Process(rc, aggTool.OriginalName, userParamMap, lastStepResp)
 }
 
