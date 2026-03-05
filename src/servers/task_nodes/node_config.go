@@ -43,56 +43,20 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 	return cfg, nil
 }
 
-// ParseAggregateConfigIDs 解析聚合节点配置，返回子节点ID列表
-func ParseAggregateConfigIDs(raw string) ([]int32, error) {
+// ParseAggregateConfigNames 解析聚合节点配置，返回子节点名称列表
+func ParseAggregateConfigNames(raw string) ([]string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil, fmt.Errorf("invalid_aggregate_config: config is empty")
 	}
-	//把 JSON 格式的数字数组 "[1, 2, 3]" 解析成 Go 的整数切片 []int32{1, 2, 3} 。
-	//JSON 格式的数字数组 "[1, 2, 3]"是数据库里存的
-	var nodeIDs []int32
-	if err := json.Unmarshal([]byte(trimmed), &nodeIDs); err != nil {
+
+	var nodeNames []string
+	if err := json.Unmarshal([]byte(trimmed), &nodeNames); err != nil {
 		return nil, fmt.Errorf("invalid_aggregate_config: parse json failed: %w", err)
 	}
 
-	if len(nodeIDs) == 0 {
+	if len(nodeNames) == 0 {
 		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
 	}
-	return nodeIDs, nil
-}
-
-// ExtractServiceNameFromURL 从 node_config 的 URL 中提取服务名
-// 规则：提取第二个和第三个 - 之间的字段
-// 例如：http://xxx-Serpapi-xxx -> Serpapi
-func ExtractServiceNameFromURL(nodeConfig string) (string, error) {
-	cfg, err := ParseNodeRuntimeConfig(nodeConfig)
-	if err != nil {
-		return "", err
-	}
-
-	url := cfg.URL
-	// 查找所有 - 的位置
-	dashPositions := []int{}
-	for i, ch := range url {
-		if ch == '-' {
-			dashPositions = append(dashPositions, i)
-		}
-	}
-
-	// 需要至少3个横杠才能提取第二个和第三个之间的内容
-	if len(dashPositions) < 3 {
-		return "", fmt.Errorf("url format invalid: need at least 3 dashes, got %d", len(dashPositions))
-	}
-
-	// 提取第二个和第三个 - 之间的字段（索引1和2）
-	start := dashPositions[1] + 1
-	end := dashPositions[2]
-	serviceName := url[start:end]
-
-	if serviceName == "" {
-		return "", fmt.Errorf("extracted service name is empty")
-	}
-
-	return serviceName, nil
+	return nodeNames, nil
 }
