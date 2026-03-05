@@ -31,13 +31,13 @@ func (m *AeMcpTaskNode) GetChianNodes(nodeIds []int32) (err error, list []*AeMcp
 }
 
 // 按 node name 获取节点列表
-func (m *AeMcpTaskNode) GetNodesByNames(nodeNames []string) (error, []*AeMcpTaskNode) {
-	noOrderList := make([]*AeMcpTaskNode, 0, len(nodeNames))
-	err := GetDB().Where("node_name in ?", nodeNames).Find(&noOrderList).Error
+func (m *AeMcpTaskNode) GetNodesByNames(nodeNames []string) ([]*AeMcpTaskNode, error) {
+	var nodes []*AeMcpTaskNode
+	err := GetDB().Where("node_name in ?", nodeNames).Find(&nodes).Error
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, sortAeMcpTaskNodeByNames(nodeNames, noOrderList)
+	return sortAeMcpTaskNodeByNames(nodeNames, nodes), nil
 }
 
 // 按nodeIds排序任务链节点

@@ -14,10 +14,10 @@ import (
 
 // AggregateNode 聚合节点，将多个子节点的工具聚合到一个服务中
 type AggregateNode struct {
-	toolList       []*types.ToolDesc          // 预计算的工具列表
-	toolToNode     map[string]types.Processor // 聚合工具名 -> 节点实例
-	NodeInfo       *types.NodeInfo
-	mutex          sync.RWMutex
+	toolList   []*types.ToolDesc          // 预计算的工具列表
+	toolToNode map[string]types.Processor // 聚合工具名 -> 节点实例
+	NodeInfo   *types.NodeInfo
+	mutex      sync.RWMutex
 }
 
 // Init 初始化聚合节点
@@ -51,7 +51,7 @@ func (a *AggregateNode) initSubNodes(config types.InitConfig, subNodeNames []str
 	a.toolList = make([]*types.ToolDesc, 0)
 
 	nodeModel := &models.AeMcpTaskNode{}
-	err, subNodes := nodeModel.GetNodesByNames(subNodeNames)
+	subNodes, err := nodeModel.GetNodesByNames(subNodeNames)
 	if err != nil {
 		return fmt.Errorf("query_sub_nodes_failed: %w", err)
 	}
@@ -123,9 +123,9 @@ func (a *AggregateNode) GetNodeInfo() *types.NodeInfo {
 
 // parseOriginalToolName 解析原始工具名：E_NodeName_ToolName -> ToolName
 func parseOriginalToolName(aggregatedName string) string {
-	// E_NodeName_ToolName，找到第二个 _ 后的部分
-	if idx := strings.Index(aggregatedName[2:], "_"); idx != -1 {
-		return aggregatedName[2+idx+1:]
+	// 跳过 "E_"，找到下一个 "_" 后的部分
+	if idx := strings.Index(aggregatedName[2:], "_"); idx >= 0 {
+		return aggregatedName[idx+3:]
 	}
 	return aggregatedName
 }
