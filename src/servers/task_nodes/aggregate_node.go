@@ -13,13 +13,19 @@ import (
 
 // AggregateNode 聚合节点，将多个子节点的工具聚合到一个服务中
 type AggregateNode struct {
-	mutex           sync.RWMutex
-	NodeInfo        *types.NodeInfo
-	mapToolInfos    map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
-	mapNodeHandles  map[int32]types.Processor  // 节点ID -> 节点实例
-	mapServiceNames map[int32]string           // 节点ID -> 服务名（从URL提取）
-	subNodeIDs      []int32                    // 配置的子节点ID列表
-	initConfig      types.InitConfig           // 保存初始化配置
+	initConfig types.InitConfig // 保存初始化配置
+
+	toolList       []*types.ToolDesc
+	mapNodeHandles map[string]types.Processor // 服务名 -> 节点实例
+	NodeInfo       *types.NodeInfo
+
+	mutex sync.RWMutex
+
+	//mapToolInfos    map[string]*AggregatedTool // 聚合后工具名 -> 工具信息
+
+	//mapServiceNames map[int32]string           // 节点ID -> 服务名（从URL提取）
+	//subNodeIDs      []int32                    // 配置的子节点ID列表
+
 }
 
 // AggregatedTool 聚合后的工具信息
