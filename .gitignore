@@ -32,4 +32,8 @@ mcp_servers/
 node_modules/
 docs/
 
+# 计划文档（不提交到代码仓库）
+plans/
+
 .dockerignore
+.vscode

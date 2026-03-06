@@ -184,6 +184,7 @@ func main() {
 			}
 			w.Write([]byte("MCP服务初始化完成"))
 		})
+
 	}
 
 	// 使用 Prometheus 中间件包装（先包装 Handler，再添加认证，最后添加指标收集）
