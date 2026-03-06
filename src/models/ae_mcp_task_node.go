@@ -30,6 +30,16 @@ func (m *AeMcpTaskNode) GetChianNodes(nodeIds []int32) (err error, list []*AeMcp
 	return
 }
 
+// 按 node name 获取节点列表
+func (m *AeMcpTaskNode) GetNodesByNames(nodeNames []string) ([]*AeMcpTaskNode, error) {
+	var nodes []*AeMcpTaskNode
+	err := GetDB().Where("node_name in ?", nodeNames).Find(&nodes).Error
+	if err != nil {
+		return nil, err
+	}
+	return sortAeMcpTaskNodeByNames(nodeNames, nodes), nil
+}
+
 // 按nodeIds排序任务链节点
 func sortAeMcpTaskNode(nodeIds []int32, nodeList []*AeMcpTaskNode) []*AeMcpTaskNode {
 	// 创建一个map用于快速查找node
@@ -42,6 +52,23 @@ func sortAeMcpTaskNode(nodeIds []int32, nodeList []*AeMcpTaskNode) []*AeMcpTaskN
 	sortedNodes := make([]*AeMcpTaskNode, 0, len(nodeIds))
 	for _, id := range nodeIds {
 		if node, exists := nodeMap[id]; exists {
+			sortedNodes = append(sortedNodes, node)
+		}
+	}
+
+	return sortedNodes
+}
+
+// 按 node name 排序节点
+func sortAeMcpTaskNodeByNames(nodeNames []string, nodeList []*AeMcpTaskNode) []*AeMcpTaskNode {
+	nodeMap := make(map[string]*AeMcpTaskNode)
+	for _, node := range nodeList {
+		nodeMap[node.NodeName] = node
+	}
+
+	sortedNodes := make([]*AeMcpTaskNode, 0, len(nodeNames))
+	for _, name := range nodeNames {
+		if node, exists := nodeMap[name]; exists {
 			sortedNodes = append(sortedNodes, node)
 		}
 	}

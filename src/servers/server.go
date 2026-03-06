@@ -337,3 +337,4 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 
 	return result, result.StructuredContent, nil
 }
+

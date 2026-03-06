@@ -42,3 +42,21 @@ func ParseNodeRuntimeConfig(raw string) (*NodeRuntimeConfig, error) {
 	cfg.Protocol = "http"
 	return cfg, nil
 }
+
+// ParseAggregateConfigNames 解析聚合节点配置，返回子节点名称列表
+func ParseAggregateConfigNames(raw string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, fmt.Errorf("invalid_aggregate_config: config is empty")
+	}
+
+	var nodeNames []string
+	if err := json.Unmarshal([]byte(trimmed), &nodeNames); err != nil {
+		return nil, fmt.Errorf("invalid_aggregate_config: parse json failed: %w", err)
+	}
+
+	if len(nodeNames) == 0 {
+		return nil, fmt.Errorf("invalid_aggregate_config: node list is empty")
+	}
+	return nodeNames, nil
+}

@@ -24,6 +24,9 @@ var NodeRegistry = map[string]func() types.Processor{
 	"statistic_rear_handle": func() types.Processor {
 		return &StatisticRearNode{}
 	},
+	"aggregate_handle": func() types.Processor {
+		return &AggregateNode{}
+	},
 }
 
 // CreateNodeByType 根据node_type创建节点实例
