@@ -70,6 +70,7 @@ func HandleRecommend(w http.ResponseWriter, r *http.Request) {
 		toolNameLower := strings.ToLower(tool.ToolName)
 		toolDescLower := strings.ToLower(tool.ToolDesc)
 
+		// 轻量打分：名称命中 +2，描述命中 +1，用于返回 top3 候选工具。
 		for _, word := range words {
 			if !nameMatched && strings.Contains(toolNameLower, word) {
 				score += 2

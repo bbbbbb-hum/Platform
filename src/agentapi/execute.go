@@ -39,6 +39,7 @@ func HandleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 仅允许执行当前服务已注册工具，避免调用不存在或未授权的工具名。
 	if findToolByName(server.GetToolDescList(), req.ToolName) == nil {
 		writeError(w, http.StatusNotFound, "tool not found")
 		return

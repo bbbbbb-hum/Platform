@@ -10,8 +10,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-
-	gt "github.com/bas24/googletranslatefree"
 )
 
 // agent-api 使用的 Skill 服务 ID（超级集合服务，写死）
@@ -36,6 +34,8 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func getSkillServer() (string, *servers.Server, error) {
+	// 当前 agent-api 统一路由到一个“超级集合服务”，
+	// 因此直接使用固定 server id 从已加载的服务映射中取实例。
 	server := servers.McpServicesMap[agentSkillServerID]
 	if server == nil || server.ChainInstance == nil {
 		return "", nil, errors.New("skill server not found")
@@ -94,30 +94,9 @@ func prepareMatchQuery(query string) string {
 		return ""
 	}
 
-	if !containsNonASCII(query) {
-		return strings.ToLower(query)
-	}
-
-	translated, err := gt.Translate(query, "auto", "en")
-	if err != nil {
-		return strings.ToLower(query)
-	}
-
-	translated = strings.TrimSpace(translated)
-	if translated == "" {
-		return strings.ToLower(query)
-	}
-
-	return strings.ToLower(translated)
-}
-
-func containsNonASCII(input string) bool {
-	for _, r := range input {
-		if r > 127 {
-			return true
-		}
-	}
-	return false
+	// agent-api 作为机器调用接口，不再依赖外部翻译服务
+	// 统一做大小写标准化，由调用方决定是否先进行中英转换。
+	return strings.ToLower(query)
 }
 
 func splitWords(input string) []string {
@@ -126,6 +105,7 @@ func splitWords(input string) []string {
 		return nil
 	}
 
+	// 去重后保留词序，避免同一关键词重复加权。
 	seen := make(map[string]struct{}, len(parts))
 	words := make([]string, 0, len(parts))
 	for _, part := range parts {
