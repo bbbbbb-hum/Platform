@@ -1,6 +1,7 @@
 package main
 
 import (
+	"AgentEarth_AgentPlatform/src/agentapi"
 	"AgentEarth_AgentPlatform/src/boot"
 	"AgentEarth_AgentPlatform/src/config"
 	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
@@ -186,6 +187,8 @@ func main() {
 		})
 
 	}
+
+	agentapi.RegisterRoutes(mux, authMiddleware)
 
 	// 使用 Prometheus 中间件包装（先包装 Handler，再添加认证，最后添加指标收集）
 	mcpHandler := middleware.PrometheusMiddleware(authMiddleware.Auth(httpStreamableHandler.ServeHTTP))

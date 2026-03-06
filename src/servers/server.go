@@ -21,6 +21,7 @@ import (
 
 // McpServicesMap 以 server_id 为键的服务实例缓存，对应 /mcp-server/{server_id} 路由。
 var McpServicesMap = map[string]*Server{}
+
 // RequestLogs 请求日志缓存（链路节点写入，后续入库/发布）。
 var RequestLogs = map[string]*models.AeMcpServicesRequestLogs{}
 
@@ -40,6 +41,10 @@ type Server struct {
 
 func (s *Server) GetServer() *mcp.Server {
 	return s.mcpServer
+}
+
+func (s *Server) GetToolDescList() []*types.ToolDesc {
+	return s.toolDescList
 }
 
 // Initialize 初始化所有 MCP 服务：
@@ -337,4 +342,3 @@ func (s *Server) OnCallTool(ctx context.Context, req *mcp.CallToolRequest, args 
 
 	return result, result.StructuredContent, nil
 }
-

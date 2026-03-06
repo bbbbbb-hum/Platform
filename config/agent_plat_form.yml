@@ -9,6 +9,7 @@ TIMEZONE: Asia/Shanghai #时区
 SERVER_AUTH_ENABLE: true # 鉴权开关
 SERVER_AUTH_KEY: X-Api-Key # 鉴权字段
 SERVER_AUTH_CACHE_TTL: 1800 # 鉴权缓存时间
+AGENT_SKILL_SERVER_ID: server_0000408 # Skill 目标服务ID
 SERVER_NAMESPACE: local-dev
 
 DB_CONNECTION: postgres #数据库类型

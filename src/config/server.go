@@ -21,9 +21,10 @@ func init() {
 			// 设置时区，JWT 里会使用，日志记录里也会使用到
 			"timezone": config.Env("TIMEZONE", "Asia/Shanghai"),
 
-			"auth_enable":    config.Env("SERVER_AUTH_ENABLE", false),
-			"auth_key":       config.Env("SERVER_AUTH_KEY", ""),
-			"auth_cache_ttl": config.Env("SERVER_AUTH_CACHE_TTL", 300),
+			"auth_enable":     config.Env("SERVER_AUTH_ENABLE", false),
+			"auth_key":        config.Env("SERVER_AUTH_KEY", ""),
+			"auth_cache_ttl":  config.Env("SERVER_AUTH_CACHE_TTL", 300),
+			"skill_server_id": config.Env("AGENT_SKILL_SERVER_ID", ""),
 
 			"namespace": config.Env("NAMESPACE", "local-dev"),
 		}
