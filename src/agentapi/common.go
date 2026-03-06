@@ -2,7 +2,6 @@ package agentapi
 
 import (
 	"AgentEarth_AgentPlatform/src/helpers"
-	helperConfig "AgentEarth_AgentPlatform/src/helpers/config"
 	"AgentEarth_AgentPlatform/src/servers"
 	"AgentEarth_AgentPlatform/src/servers/types"
 	"encoding/json"
@@ -14,6 +13,9 @@ import (
 
 	gt "github.com/bas24/googletranslatefree"
 )
+
+// agent-api 使用的 Skill 服务 ID（超级集合服务，写死）
+const agentSkillServerID = "server_0000408"
 
 func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 	body, err := json.Marshal(payload)
@@ -34,17 +36,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 func getSkillServer() (string, *servers.Server, error) {
-	serverID := helperConfig.GetString("server.skill_server_id")
-	if strings.TrimSpace(serverID) == "" {
-		return "", nil, errors.New("skill server id not configured")
-	}
-
-	server := servers.McpServicesMap[serverID]
+	server := servers.McpServicesMap[agentSkillServerID]
 	if server == nil || server.ChainInstance == nil {
 		return "", nil, errors.New("skill server not found")
 	}
 
-	return serverID, server, nil
+	return agentSkillServerID, server, nil
 }
 
 func findToolByName(toolList []*types.ToolDesc, toolName string) *types.ToolDesc {
